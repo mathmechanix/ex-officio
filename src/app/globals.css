@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 46 22% 94%; /* #f4f2ea */
+    --foreground: 108 19% 13%; /* #1e261b */
+    --card: 48 30% 98%; /* #fdfcf9 */
+    --card-foreground: 108 19% 13%;
+    --popover: 48 30% 98%;
+    --popover-foreground: 108 19% 13%;
+    --primary: 104 33% 16%; /* #23351c */
+    --primary-foreground: 46 25% 96%;
+    --secondary: 44 17% 88%; /* #e7e4d8 */
+    --secondary-foreground: 108 19% 15%;
+    --muted: 44 17% 90%;
+    --muted-foreground: 100 8% 38%; /* #5b6656 */
+    --accent: 104 22% 88%;
+    --accent-foreground: 104 33% 16%;
+    --destructive: 0 55% 42%;
+    --destructive-foreground: 46 25% 96%;
+    --border: 43 16% 80%; /* #d3cebd */
+    --input: 43 16% 80%;
+    --ring: 104 33% 20%;
+    --radius: 0.625rem;
+    --sidebar-width: 270px;
+    --header-height: 60px;
+  }
+
+  .dark {
+    --background: 110 20% 7%; /* #0f160e */
+    --foreground: 46 15% 92%; /* #ece9df */
+    --card: 110 18% 10%; /* #161f14 */
+    --card-foreground: 46 15% 92%;
+    --popover: 110 18% 10%;
+    --popover-foreground: 46 15% 92%;
+    --primary: 104 30% 65%; /* #93b586 */
+    --primary-foreground: 110 20% 7%;
+    --secondary: 110 12% 16%;
+    --secondary-foreground: 46 15% 85%;
+    --muted: 110 12% 16%;
+    --muted-foreground: 95 10% 55%;
+    --accent: 110 15% 18%;
+    --accent-foreground: 46 15% 92%;
+    --destructive: 0 50% 55%;
+    --destructive-foreground: 46 15% 92%;
+    --border: 110 12% 18%; /* #263323 */
+    --input: 110 12% 18%;
+    --ring: 104 30% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: hsl(var(--background));
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Quiet scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-container {
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

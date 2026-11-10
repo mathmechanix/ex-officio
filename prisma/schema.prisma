@@ -1,0 +1,706 @@
+// ===========================================
+// Ex Officio — Prisma Schema
+// ===========================================
+// Platform for AI-powered project handover
+// and institutional knowledge management.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  PROJECT_LEAD
+  MEMBER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  HANDOVER_IN_PROGRESS
+  COMPLETED
+}
+
+enum ProjectMemberRole {
+  OWNER
+  LEAD
+  CONTRIBUTOR
+  VIEWER
+}
+
+enum GitHubSyncStatus {
+  IDLE
+  SYNCING
+  COMPLETED
+  FAILED
+}
+
+enum PRState {
+  OPEN
+  CLOSED
+  MERGED
+}
+
+enum IssueState {
+  OPEN
+  CLOSED
+}
+
+enum FileType {
+  PDF
+  DOCX
+  TXT
+  MARKDOWN
+}
+
+enum DocumentCategory {
+  MEETING_MINUTES
+  TECHNICAL_DECISION
+  ARCHITECTURE
+  DISCUSSION
+  BUG_FIX
+  FAQ
+  OTHER
+}
+
+enum KnowledgeSourceType {
+  GITHUB_COMMIT
+  GITHUB_PR
+  GITHUB_ISSUE
+  DOCUMENT
+  MEETING
+  MANUAL
+}
+
+enum TimelineEventType {
+  COMMIT
+  PULL_REQUEST
+  ISSUE
+  DOCUMENT_UPLOAD
+  MEETING
+  DECISION
+  TASK_COMPLETION
+  MEMBER_ACTIVITY
+}
+
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AnalysisType {
+  FULL_ANALYSIS
+  INCREMENTAL
+  HANDOVER_SPECIFIC
+}
+
+enum InsightCategory {
+  TECHNICAL_DECISION
+  UNFINISHED_TASK
+  HIDDEN_DEPENDENCY
+  RISK
+  KNOWLEDGE_GAP
+  MISSING_DOCUMENTATION
+  KEY_CONTRIBUTION
+  ARCHITECTURE_DECISION
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum InsightStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum EvidenceSourceType {
+  GITHUB_COMMIT
+  GITHUB_PR
+  GITHUB_ISSUE
+  DOCUMENT
+  KNOWLEDGE_ENTRY
+}
+
+enum HandoverReportStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AccessLevel {
+  VIEW
+  EDIT
+  ADMIN
+}
+
+enum RiskCategory {
+  KNOWLEDGE_CONCENTRATION
+  UNFINISHED_WORK
+  MISSING_DOCS
+  UNRESOLVED_BUGS
+  DEPENDENCY_RISK
+  TRANSITION_RISK
+}
+
+enum Likelihood {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum Impact {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RiskStatus {
+  IDENTIFIED
+  MITIGATING
+  RESOLVED
+  ACCEPTED
+}
+
+enum NotificationType {
+  HANDOVER_STATUS
+  APPROVAL_PENDING
+  TASK_ASSIGNED
+  REPORT_PUBLISHED
+  GITHUB_SYNC
+  ANALYSIS_COMPLETE
+  GENERAL
+}
+
+// ---------------------------------------------------------------------------
+// User & Auth (NextAuth.js compatible)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // Nullable — OAuth users don't have one
+  role          UserRole  @default(MEMBER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+
+  // Platform relations
+  ownedProjects        Project[]
+  projectMemberships   ProjectMember[]
+  uploadedDocuments    Document[]
+  createdKnowledge     KnowledgeEntry[]
+  triggeredAnalyses    AIAnalysis[]
+  reviewedInsights     AIInsight[]         @relation("InsightReviewer")
+  reviewedReports      HandoverReport[]    @relation("ReportReviewer")
+  departingReports     HandoverReport[]    @relation("DepartingMember")
+  grantedAccess        HandoverReportAccess[] @relation("AccessGranter")
+  receivedAccess       HandoverReportAccess[] @relation("AccessReceiver")
+  notifications        Notification[]
+  uploadedMeetings     Meeting[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Project
+// ---------------------------------------------------------------------------
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  slug        String        @unique
+  description String?       @db.Text
+  status      ProjectStatus @default(ACTIVE)
+  techStack   String[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  ownerId     String
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  // Relations
+  members          ProjectMember[]
+  githubConnection GitHubConnection?
+  commits          GitHubCommit[]
+  pullRequests     GitHubPullRequest[]
+  issues           GitHubIssue[]
+  documents        Document[]
+  knowledgeEntries KnowledgeEntry[]
+  timelineEvents   TimelineEvent[]
+  analyses         AIAnalysis[]
+  insights         AIInsight[]
+  handoverReports  HandoverReport[]
+  riskAssessments  RiskAssessment[]
+  meetings         Meeting[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ProjectMember {
+  id          String            @id @default(cuid())
+  userId      String
+  projectId   String
+  role        ProjectMemberRole @default(CONTRIBUTOR)
+  joinedAt    DateTime          @default(now())
+  departingAt DateTime?
+  isActive    Boolean           @default(true)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Relations
+  commits         GitHubCommit[]
+  pullRequests    GitHubPullRequest[]
+  issues          GitHubIssue[]
+  timelineEvents  TimelineEvent[]
+  riskAssessments RiskAssessment[]
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// GitHub Integration
+// ---------------------------------------------------------------------------
+
+model GitHubConnection {
+  id           String           @id @default(cuid())
+  projectId    String           @unique
+  repoOwner    String
+  repoName     String
+  repoUrl      String
+  accessToken  String           @db.Text // Encrypted at application level
+  lastSyncedAt DateTime?
+  syncStatus   GitHubSyncStatus @default(IDLE)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model GitHubCommit {
+  id              String   @id @default(cuid())
+  sha             String
+  message         String   @db.Text
+  authorName      String
+  authorEmail     String
+  authorAvatarUrl String?
+  committedAt     DateTime
+  additions       Int      @default(0)
+  deletions       Int      @default(0)
+  filesChanged    Int      @default(0)
+  url             String
+  projectId       String
+  memberId        String?
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  member  ProjectMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([sha, projectId])
+  @@index([projectId])
+  @@index([memberId])
+  @@index([committedAt])
+}
+
+model GitHubPullRequest {
+  id              String    @id @default(cuid())
+  number          Int
+  title           String
+  body            String?   @db.Text
+  state           PRState
+  authorName      String
+  authorAvatarUrl String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  mergedAt        DateTime?
+  closedAt        DateTime?
+  url             String
+  projectId       String
+  memberId        String?
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  member  ProjectMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([number, projectId])
+  @@index([projectId])
+  @@index([memberId])
+  @@index([state])
+  @@index([createdAt])
+}
+
+model GitHubIssue {
+  id              String     @id @default(cuid())
+  number          Int
+  title           String
+  body            String?    @db.Text
+  state           IssueState
+  labels          String[]
+  authorName      String
+  authorAvatarUrl String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  closedAt        DateTime?
+  url             String
+  projectId       String
+  memberId        String?
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  member  ProjectMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([number, projectId])
+  @@index([projectId])
+  @@index([memberId])
+  @@index([state])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge Base
+// ---------------------------------------------------------------------------
+
+model Document {
+  id           String           @id @default(cuid())
+  title        String
+  fileName     String
+  fileType     FileType
+  fileUrl      String
+  fileSize     Int
+  content      String?          @db.Text // Extracted text content
+  category     DocumentCategory @default(OTHER)
+  projectId    String
+  uploadedById String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  meetings   Meeting[]
+
+  @@index([projectId])
+  @@index([uploadedById])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model KnowledgeEntry {
+  id         String              @id @default(cuid())
+  title      String
+  content    String              @db.Text
+  category   DocumentCategory    @default(OTHER)
+  tags       String[]
+  projectId  String
+  createdById String
+  sourceType KnowledgeSourceType
+  sourceId   String?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([category])
+  @@index([sourceType])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Timeline
+// ---------------------------------------------------------------------------
+
+model TimelineEvent {
+  id          String            @id @default(cuid())
+  type        TimelineEventType
+  title       String
+  description String?           @db.Text
+  occurredAt  DateTime
+  metadata    Json?
+  projectId   String
+  memberId    String?
+  sourceType  String?
+  sourceId    String?
+  createdAt   DateTime          @default(now())
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  member  ProjectMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([memberId])
+  @@index([type])
+  @@index([occurredAt])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// AI Analysis
+// ---------------------------------------------------------------------------
+
+model AIAnalysis {
+  id            String         @id @default(cuid())
+  projectId     String
+  status        AnalysisStatus @default(PENDING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  analysisType  AnalysisType   @default(FULL_ANALYSIS)
+  rawResponse   Json?
+  triggeredById String
+  createdAt     DateTime       @default(now())
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  triggeredBy User        @relation(fields: [triggeredById], references: [id], onDelete: Restrict)
+  insights    AIInsight[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AIInsight {
+  id               String          @id @default(cuid())
+  analysisId       String
+  category         InsightCategory
+  title            String
+  content          String          @db.Text
+  severity         Severity        @default(MEDIUM)
+  confidenceScore  Float           @default(0)
+  isConflicting    Boolean         @default(false)
+  conflictDetails  String?         @db.Text
+  status           InsightStatus   @default(DRAFT)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNotes      String?         @db.Text
+  projectId        String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  analysis   AIAnalysis        @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  reviewedBy User?             @relation("InsightReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  evidence   InsightEvidence[]
+
+  @@index([analysisId])
+  @@index([projectId])
+  @@index([category])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InsightEvidence {
+  id             String             @id @default(cuid())
+  insightId      String
+  sourceType     EvidenceSourceType
+  sourceId       String
+  sourceUrl      String?
+  sourceTitle    String
+  relevanceScore Float              @default(0)
+  excerpt        String?            @db.Text
+  createdAt      DateTime           @default(now())
+
+  insight AIInsight @relation(fields: [insightId], references: [id], onDelete: Cascade)
+
+  @@index([insightId])
+  @@index([sourceType])
+}
+
+// ---------------------------------------------------------------------------
+// Handover Report
+// ---------------------------------------------------------------------------
+
+model HandoverReport {
+  id                  String               @id @default(cuid())
+  projectId           String
+  title               String
+  departingMemberId   String
+  status              HandoverReportStatus @default(DRAFT)
+  generatedAt         DateTime             @default(now())
+  reviewedById        String?
+  reviewedAt          DateTime?
+  approvedAt          DateTime?
+  publishedAt         DateTime?
+  summary             String?              @db.Text
+  knowledgeAssessment Json?
+  decisionInfluence   Json?
+  dependencies        Json?
+  missingInfo         Json?
+  risks               Json?
+  transitionSteps     Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  project         Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  departingMember User                   @relation("DepartingMember", fields: [departingMemberId], references: [id], onDelete: Restrict)
+  reviewedBy      User?                  @relation("ReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  accessList      HandoverReportAccess[]
+
+  @@index([projectId])
+  @@index([departingMemberId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model HandoverReportAccess {
+  id          String      @id @default(cuid())
+  reportId    String
+  userId      String
+  grantedById String
+  grantedAt   DateTime    @default(now())
+  accessLevel AccessLevel @default(VIEW)
+
+  report    HandoverReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user      User           @relation("AccessReceiver", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User           @relation("AccessGranter", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Risk & Dependencies
+// ---------------------------------------------------------------------------
+
+model RiskAssessment {
+  id          String       @id @default(cuid())
+  projectId   String
+  category    RiskCategory
+  title       String
+  description String?      @db.Text
+  severity    Severity     @default(MEDIUM)
+  likelihood  Likelihood   @default(MEDIUM)
+  impact      Impact       @default(MEDIUM)
+  mitigation  String?      @db.Text
+  status      RiskStatus   @default(IDENTIFIED)
+  memberId    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  member  ProjectMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([category])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(GENERAL)
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  link      String?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Meetings
+// ---------------------------------------------------------------------------
+
+model Meeting {
+  id           String   @id @default(cuid())
+  projectId    String
+  title        String
+  date         DateTime
+  notes        String?  @db.Text
+  attendees    String[]
+  actionItems  Json?
+  decisions    Json?
+  uploadedById String
+  documentId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User      @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([uploadedById])
+  @@index([date])
+  @@index([createdAt])
+}
