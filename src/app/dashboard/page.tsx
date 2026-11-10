@@ -46,21 +46,21 @@ export default function DashboardOverviewPage() {
   const insights: any[] = summaryData?.insights || [];
   const documents: any[] = summaryData?.documents || [];
 
-  // Combine latest NEEDS_REVIEW insights & documents for "READY FOR REVIEW"
-  const reviewQueue = [
-    ...insights
-      .filter((i) => i.status === "NEEDS_REVIEW")
-      .map((i) => ({
-        id: i.id,
-        label: i.title.slice(0, 34).toUpperCase(),
-        href: `/dashboard/projects/${selectedProjectId}/analysis`,
-      })),
-    ...documents.slice(0, 3).map((d) => ({
-      id: d.id,
-      label: `DOC: ${d.title.slice(0, 28).toUpperCase()}`,
-      href: `/dashboard/projects/${selectedProjectId}/knowledge`,
-    })),
-  ].slice(0, 5);
+  // Combine latest documents & NEEDS_REVIEW insights for "READY FOR REVIEW"
+  const docItems = documents.slice(0, 3).map((d) => ({
+    id: d.id,
+    label: `DOC: ${d.title.slice(0, 28).toUpperCase()}`,
+    href: `/dashboard/projects/${selectedProjectId}/knowledge`,
+  }));
+  const insightItems = insights
+    .filter((i) => i.status === "NEEDS_REVIEW")
+    .slice(0, 3)
+    .map((i) => ({
+      id: i.id,
+      label: i.title.slice(0, 34).toUpperCase(),
+      href: `/dashboard/projects/${selectedProjectId}/analysis`,
+    }));
+  const reviewQueue = [...docItems.slice(0, 2), ...insightItems, ...docItems.slice(2)].slice(0, 5);
 
   const highRiskList = insights
     .filter((i) => i.severity === "CRITICAL" || i.severity === "HIGH")

@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const messages = store.getTeamMessages(resolved.projectId);
     return NextResponse.json({ success: true, messages });
@@ -19,6 +20,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const projectId = resolved.projectId;
     const body = await req.json();
@@ -40,6 +42,7 @@ export async function POST(
       message,
       channel: channel || "IN_APP",
     });
+    await store.flush();
 
     return NextResponse.json({
       success: true,

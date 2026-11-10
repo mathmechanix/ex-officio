@@ -17,6 +17,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required.");
         }
 
+        await store.ready();
         const email = credentials.email.trim().toLowerCase();
         const user = store.findUserByEmail(email);
 

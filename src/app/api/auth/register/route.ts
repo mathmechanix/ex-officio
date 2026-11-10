@@ -13,6 +13,7 @@ export async function POST(req: Request) {
       );
     }
 
+    await store.ready();
     const cleanEmail = email.trim().toLowerCase();
     const existing = store.findUserByEmail(cleanEmail);
     if (existing) {
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
       role: role || "MEMBER",
       avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80`,
     });
+    await store.flush();
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import { get as getBlob, put as putBlob } from '@vercel/blob';
+import { AUTH_SECRET } from '@/lib/auth-config';
 import type { InsightCategory, SeverityLevel, InsightStatus } from '@/types';
 
 export interface StoredUser {
@@ -161,10 +164,19 @@ interface DataStore {
 }
 
 const IS_EPHEMERAL = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const USE_BLOB = Boolean(
+  process.env.BLOB_READ_WRITE_TOKEN && (IS_EPHEMERAL || process.env.USE_VERCEL_BLOB === 'true')
+);
+const BLOB_PATH = 'exofficio/store.json';
 const DATA_FILE = IS_EPHEMERAL
   ? path.join('/tmp', 'exofficio-store.json')
   : path.join(process.cwd(), 'data', 'store.json');
-const globalForStore = globalThis as unknown as { __exOfficioStoreCache?: DataStore };
+const globalForStore = globalThis as unknown as {
+  __exOfficioStoreCache?: DataStore;
+  __exOfficioBlobEtag?: string;
+  __exOfficioPendingReady?: Promise<void>;
+  __exOfficioPendingFlush?: Promise<void>;
+};
 
 const INITIAL_DATA: DataStore = {
   users: [
@@ -595,8 +607,28 @@ const INITIAL_DATA: DataStore = {
   geminiApiKey: '',
 };
 
+function mergeWithInitialData(parsed: Partial<DataStore>): DataStore {
+  return {
+    ...INITIAL_DATA,
+    ...parsed,
+    notifications: parsed.notifications ?? INITIAL_DATA.notifications,
+    handovers: parsed.handovers ?? INITIAL_DATA.handovers,
+    shareLinks: parsed.shareLinks ?? INITIAL_DATA.shareLinks,
+    teamMessages: parsed.teamMessages ?? INITIAL_DATA.teamMessages,
+  };
+}
+
+function writeLocalFallback(data: DataStore): void {
+  try {
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Write to store path skipped/failed cleanly:', err);
+  }
+}
+
 function readStore(): DataStore {
-  if (IS_EPHEMERAL && globalForStore.__exOfficioStoreCache) {
+  if ((IS_EPHEMERAL || USE_BLOB) && globalForStore.__exOfficioStoreCache) {
     return globalForStore.__exOfficioStoreCache;
   }
 
@@ -604,24 +636,12 @@ function readStore(): DataStore {
     if (!fs.existsSync(DATA_FILE)) {
       const cloned: DataStore = JSON.parse(JSON.stringify(INITIAL_DATA));
       globalForStore.__exOfficioStoreCache = cloned;
-      try {
-        fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-        fs.writeFileSync(DATA_FILE, JSON.stringify(cloned, null, 2), 'utf-8');
-      } catch {
-        // Non-fatal on read-only paths
-      }
+      writeLocalFallback(cloned);
       return cloned;
     }
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
-    const merged: DataStore = {
-      ...INITIAL_DATA,
-      ...parsed,
-      notifications: parsed.notifications ?? INITIAL_DATA.notifications,
-      handovers: parsed.handovers ?? INITIAL_DATA.handovers,
-      shareLinks: parsed.shareLinks ?? INITIAL_DATA.shareLinks,
-      teamMessages: parsed.teamMessages ?? INITIAL_DATA.teamMessages,
-    };
+    const merged = mergeWithInitialData(parsed);
     globalForStore.__exOfficioStoreCache = merged;
     return merged;
   } catch (err) {
@@ -635,15 +655,73 @@ function readStore(): DataStore {
 
 function writeStore(data: DataStore): void {
   globalForStore.__exOfficioStoreCache = data;
-  try {
-    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Write to store path skipped/failed cleanly:', err);
-  }
+  writeLocalFallback(data);
+}
+
+async function flushToBlob(data: DataStore): Promise<void> {
+  const res = await putBlob(BLOB_PATH, JSON.stringify(data), {
+    access: 'private',
+    allowOverwrite: true,
+    addRandomSuffix: false,
+    contentType: 'application/json',
+    cacheControlMaxAge: 60,
+  });
+  const maybeEtag = (res as { etag?: string }).etag;
+  globalForStore.__exOfficioBlobEtag = typeof maybeEtag === 'string' ? maybeEtag : undefined;
 }
 
 export const store = {
+  ready: async (): Promise<void> => {
+    if (!USE_BLOB) return;
+    if (globalForStore.__exOfficioPendingReady) {
+      await globalForStore.__exOfficioPendingReady;
+      return;
+    }
+    const pending = (async () => {
+      try {
+        const res = await getBlob(BLOB_PATH, {
+          access: 'private',
+          useCache: false,
+          ...(globalForStore.__exOfficioBlobEtag && globalForStore.__exOfficioStoreCache
+            ? { ifNoneMatch: globalForStore.__exOfficioBlobEtag }
+            : {}),
+        });
+        if (res === null) {
+          const initial = readStore();
+          await flushToBlob(initial);
+          return;
+        }
+        if (res.statusCode === 200 && res.stream) {
+          const text = await new Response(res.stream).text();
+          const parsed = JSON.parse(text);
+          const merged = mergeWithInitialData(parsed);
+          globalForStore.__exOfficioStoreCache = merged;
+          globalForStore.__exOfficioBlobEtag = res.blob.etag;
+          writeLocalFallback(merged);
+        }
+      } catch (err) {
+        console.warn('Blob store ready fallback used:', err);
+        readStore();
+      } finally {
+        globalForStore.__exOfficioPendingReady = undefined;
+      }
+    })();
+    globalForStore.__exOfficioPendingReady = pending;
+    await pending;
+  },
+  flush: async (): Promise<void> => {
+    if (!USE_BLOB) return;
+    const snapshot = readStore();
+    const task = (globalForStore.__exOfficioPendingFlush ?? Promise.resolve()).then(async () => {
+      try {
+        await flushToBlob(snapshot);
+      } catch (err) {
+        console.warn('Blob store flush failed cleanly:', err);
+      }
+    });
+    globalForStore.__exOfficioPendingFlush = task;
+    await task;
+  },
   // Users
   getUsers: (): StoredUser[] => readStore().users,
   findUserByEmail: (email: string): StoredUser | undefined => {
@@ -1030,11 +1108,26 @@ export const store = {
   // Share Access Links
   createShareLink: (input: Omit<StoredShareLink, 'token' | 'createdAt'>): StoredShareLink => {
     const data = readStore();
-    const randomPart = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    const createdAt = new Date().toISOString();
+    const payload = {
+      p: input.projectId,
+      r: input.accessRole,
+      s: input.redactSecrets ? 1 : 0,
+      e: input.expiresInDays,
+      c: input.createdBy,
+      t: createdAt,
+      n: Math.random().toString(36).slice(2, 8),
+    };
+    const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const sig = crypto
+      .createHmac('sha256', AUTH_SECRET)
+      .update(encoded)
+      .digest('base64url')
+      .slice(0, 24);
     const link: StoredShareLink = {
       ...input,
-      token: `ex-${randomPart}`,
-      createdAt: new Date().toISOString(),
+      token: `exs-${encoded}.${sig}`,
+      createdAt,
     };
     data.shareLinks.unshift(link);
     data.notifications.unshift({
@@ -1044,7 +1137,7 @@ export const store = {
       message: `${input.createdBy} generated a ${input.redactSecrets ? 'secret-redacted ' : ''}handover link valid for ${input.expiresInDays} days.`,
       type: 'HANDOVER_STATUS',
       time: 'Just now',
-      createdAt: new Date().toISOString(),
+      createdAt,
       read: false,
       link: `/dashboard/projects/${input.projectId}/handover`,
     });
@@ -1055,6 +1148,42 @@ export const store = {
     return readStore().shareLinks.filter((s) => s.projectId === projectId);
   },
   getShareLinkByToken: (token: string): StoredShareLink | undefined => {
+    if (token.startsWith('exs-')) {
+      const raw = token.slice(4);
+      const dotIdx = raw.lastIndexOf('.');
+      if (dotIdx > 0) {
+        const encoded = raw.slice(0, dotIdx);
+        const sig = raw.slice(dotIdx + 1);
+        const expectedSig = crypto
+          .createHmac('sha256', AUTH_SECRET)
+          .update(encoded)
+          .digest('base64url')
+          .slice(0, 24);
+        const sigBuf = Buffer.from(sig);
+        const expectedBuf = Buffer.from(expectedSig);
+        if (sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+          try {
+            const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+            const createdMs = Date.parse(parsed.t);
+            const expiresMs = createdMs + (Number(parsed.e) || 14) * 24 * 60 * 60 * 1000;
+            if (!Number.isNaN(createdMs) && Date.now() <= expiresMs) {
+              return {
+                token,
+                projectId: String(parsed.p),
+                accessRole: parsed.r,
+                redactSecrets: Boolean(parsed.s),
+                expiresInDays: Number(parsed.e) || 14,
+                createdBy: String(parsed.c || 'Sarah Connor'),
+                createdAt: String(parsed.t),
+              };
+            }
+            return undefined;
+          } catch {
+            // Fall through to array lookup if malformed
+          }
+        }
+      }
+    }
     return readStore().shareLinks.find((s) => s.token === token);
   },
 

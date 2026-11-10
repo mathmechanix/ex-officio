@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const { projectId } = await params;
     const timeline = store.getTimeline(projectId);
     return NextResponse.json({ success: true, timeline });

@@ -14,6 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const link = store.getShareLinkByToken(resolved.token);
 

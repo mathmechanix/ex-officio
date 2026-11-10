@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const projectId = resolved.projectId || "proj-apollo-9";
 

@@ -7,6 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
   try {
+    await store.ready();
     const { documentId } = await params;
     const doc = store.getDocumentById(documentId);
 
@@ -16,6 +17,7 @@ export async function POST(
 
     const aiSummary = await summarizeDocumentWithGemini(doc.title, doc.content, doc.category);
     store.updateDocumentSummary(documentId, aiSummary);
+    await store.flush();
 
     return NextResponse.json({
       success: true,

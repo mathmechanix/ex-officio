@@ -6,6 +6,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const projectId = resolved.projectId;
     const body = await req.json().catch(() => ({}));
@@ -15,6 +16,7 @@ export async function POST(
     const leadNotes = body.leadNotes;
 
     const handover = store.publishHandover(projectId, publishedBy, status, leadNotes);
+    await store.flush();
 
     return NextResponse.json({
       success: true,
@@ -34,6 +36,7 @@ export async function PATCH(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const projectId = resolved.projectId;
     const body = await req.json();
@@ -43,6 +46,7 @@ export async function PATCH(
     }
 
     const handover = store.toggleTransitionStep(projectId, body.stepId);
+    await store.flush();
     return NextResponse.json({ success: true, handover });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

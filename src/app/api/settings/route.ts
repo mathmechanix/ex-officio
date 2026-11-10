@@ -5,6 +5,7 @@ import { store } from "@/lib/store";
 
 export async function GET() {
   try {
+    await store.ready();
     const session = await getServerSession(authOptions);
     const hasKey = Boolean(store.getGeminiKey());
     return NextResponse.json({
@@ -19,15 +20,23 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    await store.ready();
     const session = await getServerSession(authOptions);
     const body = await req.json();
 
+    let dirty = false;
     if (body.name && session?.user?.email) {
       store.updateUserName(session.user.email, body.name.trim());
+      dirty = true;
     }
 
     if (typeof body.geminiKey === "string" && body.geminiKey.trim().length > 0) {
       store.setGeminiKey(body.geminiKey.trim());
+      dirty = true;
+    }
+
+    if (dirty) {
+      await store.flush();
     }
 
     return NextResponse.json({

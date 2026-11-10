@@ -11,6 +11,7 @@ export interface SearchHit {
 
 export async function GET(req: Request) {
   try {
+    await store.ready();
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get("q") || "").trim().toLowerCase();
     const projectId = searchParams.get("projectId") || "proj-apollo-9";

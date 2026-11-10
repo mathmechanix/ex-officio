@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const { projectId } = await params;
     const meetings = store.getMeetings(projectId);
     return NextResponse.json({ success: true, meetings });
@@ -19,6 +20,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const { projectId } = await params;
     const body = await req.json();
 
@@ -58,6 +60,8 @@ export async function POST(
           : [{ task: `Review notes & follow up on "${title}"`, assignee: "Priya Sharma", done: false }],
     });
 
+    await store.flush();
+
     return NextResponse.json({ success: true, meeting: newMeeting });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -66,6 +70,7 @@ export async function POST(
 
 export async function PATCH(req: Request) {
   try {
+    await store.ready();
     const body = await req.json();
     const { meetingId, itemIndex } = body;
 
@@ -77,6 +82,7 @@ export async function PATCH(req: Request) {
     if (!updated) {
       return NextResponse.json({ success: false, error: "Meeting or task not found" }, { status: 404 });
     }
+    await store.flush();
 
     return NextResponse.json({ success: true, meeting: updated });
   } catch (err: any) {

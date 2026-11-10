@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const links = store.getShareLinks(resolved.projectId);
     return NextResponse.json({ success: true, shareLinks: links });
@@ -19,6 +20,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const projectId = resolved.projectId;
     const body = await req.json().catch(() => ({}));
@@ -35,6 +37,7 @@ export async function POST(
       redactSecrets,
       expiresInDays,
     });
+    await store.flush();
 
     return NextResponse.json({
       success: true,

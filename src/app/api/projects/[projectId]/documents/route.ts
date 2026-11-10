@@ -10,6 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const { projectId } = await params;
     const documents = store.getDocuments(projectId);
     return NextResponse.json({ success: true, documents });
@@ -23,6 +24,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const { projectId } = await params;
     const contentType = req.headers.get("content-type") || "";
 
@@ -122,6 +124,7 @@ export async function POST(
       aiGrounding: true,
       uploadedBy,
     });
+    await store.flush();
 
     return NextResponse.json({
       success: true,

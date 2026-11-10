@@ -7,6 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const { projectId } = await params;
     const body = await req.json().catch(() => ({}));
 
@@ -85,6 +86,7 @@ export async function POST(
       read: false,
       link: `/dashboard/projects/${projectId}/analysis`,
     });
+    await store.flush();
 
     return NextResponse.json({
       success: true,

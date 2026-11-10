@@ -3,6 +3,7 @@ import { store } from '@/lib/store';
 
 export async function GET() {
   try {
+    await store.ready();
     const projects = store.getProjects();
     return NextResponse.json({ success: true, projects });
   } catch (error: any) {
@@ -12,6 +13,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    await store.ready();
     const body = await req.json();
     const { name, description, techStack, repoOwner, repoName } = body;
 
@@ -34,6 +36,7 @@ export async function POST(req: Request) {
         criticalOwnership: 'Core Modules',
       },
     });
+    await store.flush();
 
     return NextResponse.json({ success: true, project: newProject }, { status: 201 });
   } catch (error: any) {

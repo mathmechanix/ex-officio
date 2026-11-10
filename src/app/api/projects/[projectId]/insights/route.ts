@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const insights = store.getInsights(resolved.projectId);
     return NextResponse.json({ success: true, insights });
@@ -16,6 +17,7 @@ export async function GET(
 
 export async function PATCH(req: Request) {
   try {
+    await store.ready();
     const body = await req.json();
     const { insightId, status } = body;
 
@@ -30,6 +32,7 @@ export async function PATCH(req: Request) {
     if (!updated) {
       return NextResponse.json({ success: false, error: "Insight not found" }, { status: 404 });
     }
+    await store.flush();
 
     return NextResponse.json({ success: true, insight: updated });
   } catch (err: any) {
@@ -42,6 +45,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const body = await req.json();
     const { title, content, category, severity } = body;
@@ -70,6 +74,8 @@ export async function POST(
         },
       ],
     });
+
+    await store.flush();
 
     return NextResponse.json({ success: true, insight });
   } catch (err: any) {

@@ -6,6 +6,7 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    await store.ready();
     const resolved = await params;
     const projectId = resolved.projectId;
     store.updateProjectSync(projectId);
@@ -22,6 +23,7 @@ export async function POST(
       read: false,
       link: `/dashboard/projects/${projectId}/github`,
     });
+    await store.flush();
 
     return NextResponse.json({
       success: true,
