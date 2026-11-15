@@ -197,11 +197,13 @@ enum NotificationType {
 
 model User {
   id            String    @id @default(cuid())
+  memberCode    String?   @unique // Editable Member ID (e.g., "EXO-001")
+  department    String?   // Optional department/team label
   name          String?
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  password      String?   // Nullable — OAuth users don't have one
+  password      String?
   role          UserRole  @default(MEMBER)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -277,11 +279,11 @@ model Project {
   slug        String        @unique
   description String?       @db.Text
   status      ProjectStatus @default(ACTIVE)
+  progress    Int           @default(0) // 0 to 100 percentage
   techStack   String[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   ownerId     String
-
   owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
 
   // Relations
@@ -309,6 +311,7 @@ model ProjectMember {
   userId      String
   projectId   String
   role        ProjectMemberRole @default(CONTRIBUTOR)
+  workHours   Float             @default(0) // Logged work hours on this project
   joinedAt    DateTime          @default(now())
   departingAt DateTime?
   isActive    Boolean           @default(true)
