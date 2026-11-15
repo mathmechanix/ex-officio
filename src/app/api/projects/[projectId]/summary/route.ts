@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { store } from "@/lib/store";
 
 export async function GET(
@@ -10,7 +12,31 @@ export async function GET(
     const resolved = await params;
     const projectId = resolved.projectId || "proj-apollo-9";
 
+    // Strict clearance check
+    const session = await getServerSession(authOptions);
+    if (session?.user) {
+      const userId = (session.user as any).id;
+      const userRole = (session.user as any).role || "MEMBER";
+      const hasAccess = store.userCanAccessProject(userId, userRole, projectId);
+      if (!hasAccess) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Access Denied: You do not hold security clearance for this project.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const project = store.getProjectById(projectId);
+    if (!project) {
+      return NextResponse.json(
+        { success: false, error: "Project not found" },
+        { status: 404 }
+      );
+    }
+
     const documents = store.getDocuments(projectId);
     const insights = store.getInsights(projectId);
     const timeline = store.getTimeline(projectId);
@@ -19,6 +45,8 @@ export async function GET(
     const handover = store.getHandoverState(projectId);
     const shareLinks = store.getShareLinks(projectId);
     const teamMessages = store.getTeamMessages(projectId);
+    const handoverQuestions = store.getHandoverQuestions(projectId);
+    const workLogs = store.getWorkLogsForProject(projectId);
 
     const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
     const approvedCount = insights.filter((i) => i.status === "APPROVED").length;
@@ -48,6 +76,8 @@ export async function GET(
       handover,
       shareLinks,
       teamMessages,
+      handoverQuestions,
+      workLogs,
       metrics: {
         documentsCount: documents.length,
         insightsCount: insights.length,

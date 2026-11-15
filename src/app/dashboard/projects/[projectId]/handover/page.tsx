@@ -17,6 +17,10 @@ import {
   Download,
   Lock,
   X,
+  HelpCircle,
+  MessageSquare,
+  Send,
+  Sparkles,
 } from "lucide-react";
 
 export default function HandoverDashboardPage() {
@@ -37,6 +41,17 @@ export default function HandoverDashboardPage() {
   const [publishedBy, setPublishedBy] = useState<string | undefined>(undefined);
   const [transitionSteps, setTransitionSteps] = useState<any[]>([]);
   const [leadNotes, setLeadNotes] = useState("");
+
+  // Continuity Q&A State
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [showAskModal, setShowAskModal] = useState(false);
+  const [newQuestionText, setNewQuestionText] = useState("");
+  const [newQuestionCategory, setNewQuestionCategory] = useState("GENERAL");
+  const [autoGenerateAI, setAutoGenerateAI] = useState(true);
+  const [submittingQuestion, setSubmittingQuestion] = useState(false);
+  const [generatingAIAnswerId, setGeneratingAIAnswerId] = useState<string | null>(null);
+  const [leadAnswerInputs, setLeadAnswerInputs] = useState<Record<string, string>>({});
+  const [submittingLeadAnswerId, setSubmittingLeadAnswerId] = useState<string | null>(null);
 
   // Share Access Modal State
   const [showShareModal, setShowShareModal] = useState(false);
@@ -62,6 +77,7 @@ export default function HandoverDashboardPage() {
         setTransitionSteps(data.handover?.transitionSteps || []);
         setLeadNotes(data.handover?.leadNotes || "");
         setShareLinks(data.shareLinks || []);
+        setQuestions(data.handoverQuestions || []);
       })
       .catch((err) => console.error("Failed to load handover dossier:", err))
       .finally(() => {
@@ -71,6 +87,90 @@ export default function HandoverDashboardPage() {
       active = false;
     };
   }, [projectId]);
+
+  const handleAskQuestionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuestionText.trim()) return;
+    setSubmittingQuestion(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/handover/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: newQuestionText.trim(),
+          category: newQuestionCategory,
+          askedBy: currentUserName,
+          autoGenerateAI,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.question) {
+        setQuestions((prev) => [data.question, ...prev]);
+        setNewQuestionText("");
+        setShowAskModal(false);
+        setActiveTab("q7");
+      } else {
+        alert(data.error || "Failed to post question.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setSubmittingQuestion(false);
+    }
+  };
+
+  const handleGenerateAIAnswer = async (questionId: string) => {
+    setGeneratingAIAnswerId(questionId);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/handover/questions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId, generateAI: true }),
+      });
+      const data = await res.json();
+      if (data.success && data.question) {
+        setQuestions((prev) =>
+          prev.map((q) => (q.id === questionId ? data.question : q))
+        );
+      } else {
+        alert(data.error || "Failed to generate AI answer.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setGeneratingAIAnswerId(null);
+    }
+  };
+
+  const handleLeadAnswerSubmit = async (questionId: string) => {
+    const answer = leadAnswerInputs[questionId]?.trim();
+    if (!answer) return;
+    setSubmittingLeadAnswerId(questionId);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/handover/questions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId,
+          answer,
+          answeredBy: currentUserName,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.question) {
+        setQuestions((prev) =>
+          prev.map((q) => (q.id === questionId ? data.question : q))
+        );
+        setLeadAnswerInputs((prev) => ({ ...prev, [questionId]: "" }));
+      } else {
+        alert(data.error || "Failed to submit lead answer.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setSubmittingLeadAnswerId(null);
+    }
+  };
 
   const project = summaryData?.project || {
     name: "Apollo Core Platform",
@@ -291,9 +391,18 @@ export default function HandoverDashboardPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={() => setShowAskModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-moss-900 hover:bg-moss-800 text-sand-50 text-xs font-mono font-semibold transition cursor-pointer shadow-sm"
+              title="Submit a continuity question for this project"
+            >
+              <HelpCircle size={13} />
+              <span>ASK QUESTION</span>
+            </button>
+
+            <button
               onClick={handleExportPdf}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-sand-200 hover:bg-sand-300 border border-sand-300 text-sand-900 text-xs font-mono font-semibold transition"
-              title="Export complete 6-section handover dossier as PDF"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-sand-200 hover:bg-sand-300 border border-sand-300 text-sand-900 text-xs font-mono font-semibold transition cursor-pointer"
+              title="Export complete 7-section handover dossier as PDF"
             >
               <Printer size={13} />
               <span>EXPORT PDF</span>
@@ -426,6 +535,7 @@ export default function HandoverDashboardPage() {
               { id: "q4", label: `4. DOCUMENTS & GAPS (${documents.length})` },
               { id: "q5", label: `5. POST-DEPARTURE RISKS (${unfinishedOrRiskInsights.length})` },
               { id: "q6", label: `6. TRANSITION STEPS (${transitionSteps.filter((s) => s.done).length}/${transitionSteps.length})` },
+              { id: "q7", label: `7. CONTINUITY Q&A (${questions.length})` },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -614,6 +724,120 @@ export default function HandoverDashboardPage() {
               ))}
             </div>
           )}
+
+          {/* Tab 7: CONTINUITY Q&A */}
+          {activeTab === "q7" && (
+            <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sand-200 pb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-sand-950 font-sans">
+                    Handover Continuity Q&amp;A Knowledge Base
+                  </h3>
+                  <p className="text-xs text-sand-600 font-sans mt-0.5">
+                    Live questions asked by incoming engineers, resolved by departing leads and AI evidence reconstruction.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAskModal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-moss-900 text-sand-50 text-xs font-mono font-bold hover:bg-moss-800 transition flex items-center gap-1.5 self-start cursor-pointer shadow-sm"
+                >
+                  <HelpCircle size={13} />
+                  <span>ASK CONTINUITY QUESTION</span>
+                </button>
+              </div>
+
+              {questions.length > 0 ? (
+                <div className="space-y-4">
+                  {questions.map((q) => (
+                    <div
+                      key={q.id}
+                      className="p-4 rounded-xl bg-sand-100 border border-sand-300 space-y-3 font-mono text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sand-950 font-sans text-sm">
+                              Q: {q.question}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-sand-500 mt-0.5">
+                            Asked by {q.userName} ({q.userRole}) • {new Date(q.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase shrink-0 ${
+                            q.status === "ANSWERED"
+                              ? "bg-moss-900 text-sand-50"
+                              : "bg-moss-200 text-moss-900 border border-moss-300"
+                          }`}
+                        >
+                          {q.status}
+                        </span>
+                      </div>
+
+                      {q.answer ? (
+                        <div className="p-3 rounded-lg bg-sand-50 border border-moss-200 space-y-1">
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-moss-800 uppercase">
+                            <CheckCircle2 size={12} />
+                            <span>Verified Continuity Answer (by {q.answeredBy}):</span>
+                          </div>
+                          <p className="text-xs text-sand-800 font-sans leading-relaxed">
+                            {q.answer}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-lg bg-sand-200/60 border border-sand-300 space-y-2">
+                          <div className="text-[10px] text-sand-600 font-bold uppercase">
+                            Pending Response:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              disabled={generatingAIAnswerId === q.id}
+                              onClick={() => handleGenerateAIAnswer(q.id)}
+                              className="px-2.5 py-1 rounded bg-moss-900 text-sand-50 text-[10px] font-bold hover:bg-moss-800 transition flex items-center gap-1 cursor-pointer"
+                            >
+                              {generatingAIAnswerId === q.id ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <Sparkles size={11} />
+                              )}
+                              <span>GENERATE AI ANSWER</span>
+                            </button>
+                          </div>
+
+                          <div className="pt-2 flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Type lead verification answer..."
+                              value={leadAnswerInputs[q.id] || ""}
+                              onChange={(e) =>
+                                setLeadAnswerInputs((prev) => ({
+                                  ...prev,
+                                  [q.id]: e.target.value,
+                                }))
+                              }
+                              className="flex-1 bg-sand-50 border border-sand-300 rounded px-2.5 py-1 text-xs text-sand-950 focus:outline-none focus:border-moss-700"
+                            />
+                            <button
+                              disabled={submittingLeadAnswerId === q.id}
+                              onClick={() => handleLeadAnswerSubmit(q.id)}
+                              className="px-3 py-1 rounded bg-sand-300 hover:bg-sand-400 text-sand-900 text-xs font-bold transition cursor-pointer"
+                            >
+                              SUBMIT ANSWER
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-xs font-mono text-sand-500 bg-sand-100/50 rounded-xl border border-dashed border-sand-300">
+                  No continuity questions have been submitted for this handover. Click &quot;Ask Continuity Question&quot; above to log an inquiry.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -757,6 +981,93 @@ export default function HandoverDashboardPage() {
         </div>
       )}
 
+      {/* ASK QUESTION MODAL */}
+      {showAskModal && (
+        <div className="no-print fixed inset-0 z-50 bg-sand-950/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-sand-50 border border-sand-300 rounded-2xl p-6 max-w-lg w-full shadow-xl space-y-4 font-mono text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-sand-200">
+              <div className="flex items-center gap-2">
+                <HelpCircle size={16} className="text-moss-900" />
+                <h3 className="font-bold text-sm text-sand-950 font-sans">
+                  Ask Handover Continuity Question
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAskModal(false)}
+                className="p-1 text-sand-500 hover:text-sand-950 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAskQuestionSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-sand-800 mb-1">
+                  QUESTION DETAILS
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Where is the production AWS EventBridge secret sync scheduled, and who owns the IAM role?"
+                  value={newQuestionText}
+                  onChange={(e) => setNewQuestionText(e.target.value)}
+                  className="w-full bg-sand-100 border border-sand-300 rounded-xl px-3 py-2 text-xs text-sand-950 font-sans focus:outline-none focus:border-moss-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-sand-800 mb-1">
+                  CATEGORY
+                </label>
+                <select
+                  value={newQuestionCategory}
+                  onChange={(e) => setNewQuestionCategory(e.target.value)}
+                  className="w-full bg-sand-100 border border-sand-300 rounded-xl px-3 py-2 text-xs text-sand-950 focus:outline-none focus:border-moss-700"
+                >
+                  <option value="ARCHITECTURE">Architecture &amp; Design</option>
+                  <option value="INFRASTRUCTURE">Infrastructure &amp; Hosting</option>
+                  <option value="CREDENTIALS">Secrets &amp; Credential Vault</option>
+                  <option value="RUNBOOKS">Operational Runbooks</option>
+                  <option value="UNFINISHED">Unfinished Tasks</option>
+                  <option value="GENERAL">General Continuity</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="autoAiCheck"
+                  checked={autoGenerateAI}
+                  onChange={(e) => setAutoGenerateAI(e.target.checked)}
+                  className="rounded text-moss-900"
+                />
+                <label htmlFor="autoAiCheck" className="text-xs text-sand-800 cursor-pointer">
+                  Auto-generate AI answer immediately using project docs &amp; commit evidence
+                </label>
+              </div>
+
+              <div className="pt-3 border-t border-sand-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAskModal(false)}
+                  className="px-3 py-2 rounded-xl bg-sand-200 hover:bg-sand-300 text-sand-800 font-bold transition cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingQuestion}
+                  className="px-4 py-2 rounded-xl bg-moss-900 hover:bg-moss-800 text-sand-50 font-bold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  {submittingQuestion ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>SUBMIT QUESTION</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* COMPLETE PRINTABLE DOSSIER VIEW (Rendered exclusively on Export PDF / Print!) */}
       <div className="hidden print-only space-y-6 text-black bg-white p-2">
         <div className="border-b-2 border-black pb-4">
@@ -871,6 +1182,26 @@ export default function HandoverDashboardPage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="space-y-2 print-avoid-break">
+          <h2 className="text-lg font-bold border-b border-gray-300 pb-1">
+            7. Continuity Q&amp;A Knowledge Base ({questions.length} Questions)
+          </h2>
+          <div className="space-y-3 text-xs">
+            {questions.map((q) => (
+              <div key={`p-q-${q.id}`} className="border-b border-gray-200 pb-2">
+                <div className="font-bold text-black">Q: {q.question}</div>
+                <div className="text-gray-700 mt-0.5">
+                  {q.answer ? (
+                    <span><strong>A:</strong> {q.answer} <em>(Verified by: {q.answeredBy})</em></span>
+                  ) : (
+                    <em>Pending lead verification.</em>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
     </div>

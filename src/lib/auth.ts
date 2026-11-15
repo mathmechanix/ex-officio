@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { store } from "@/lib/store";
 import { AUTH_SECRET, SESSION_COOKIE_NAME } from "@/lib/auth-config";
 
@@ -25,7 +26,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password.");
         }
 
-        const isValidPassword = credentials.password === user.passwordHash;
+        const isHashed = user.passwordHash.startsWith("$2a$") || user.passwordHash.startsWith("$2b$");
+        const isValidPassword = isHashed
+          ? bcrypt.compareSync(credentials.password, user.passwordHash)
+          : credentials.password === user.passwordHash;
+
         if (!isValidPassword) {
           throw new Error("Invalid email or password.");
         }

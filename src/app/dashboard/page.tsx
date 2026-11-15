@@ -9,8 +9,23 @@ export default function DashboardOverviewPage() {
   const { data: session } = useSession();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("10:00 am");
   const [selectedProjectId, setSelectedProjectId] = useState("proj-apollo-9");
+  const [availableProjects, setAvailableProjects] = useState<any[]>([]);
   const [summaryData, setSummaryData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/projects")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.projects?.length > 0) {
+          setAvailableProjects(data.projects);
+          if (!data.projects.some((p: any) => p.id === selectedProjectId)) {
+            setSelectedProjectId(data.projects[0].id);
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load user projects:", err));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -32,6 +47,7 @@ export default function DashboardOverviewPage() {
   }, [selectedProjectId]);
 
   const userName = session?.user?.name || "Sarah Connor";
+  const userRole = (session?.user as any)?.role || "PROJECT_LEAD";
 
   const metrics = summaryData?.metrics || {
     documentsCount: 3,
@@ -193,9 +209,19 @@ export default function DashboardOverviewPage() {
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="appearance-none pl-3 pr-7 py-1 bg-[#1e2e18] text-sand-100 rounded-md font-semibold text-[11px] tracking-wider uppercase hover:bg-[#273d1f] transition cursor-pointer focus:outline-none"
             >
-              <option value="proj-apollo-9">APOLLO CORE</option>
-              <option value="proj-mercury-2">MERCURY MOBILE</option>
-              <option value="proj-nexus-vault">NEXUS VAULT</option>
+              {availableProjects.length > 0 ? (
+                availableProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name.toUpperCase()}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="proj-apollo-9">APOLLO CORE</option>
+                  <option value="proj-mercury-2">MERCURY MOBILE</option>
+                  <option value="proj-nexus-vault">NEXUS VAULT</option>
+                </>
+              )}
             </select>
             <ChevronDown
               size={12}
@@ -210,13 +236,34 @@ export default function DashboardOverviewPage() {
         {/* Box A: QUICK ACCESS */}
         <div className="md:col-span-6 lg:col-span-3 bg-[#1e2e18] text-sand-100 p-5 rounded-2xl flex flex-col justify-between shadow-xs border border-[#273d1f]">
           <div>
-            <div className="border-b border-[#384e2f] pb-3 mb-4">
+            <div className="border-b border-[#384e2f] pb-3 mb-4 flex items-center justify-between">
               <span className="text-[11px] font-mono tracking-widest text-moss-300 uppercase font-bold">
                 QUICK ACCESS
+              </span>
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-moss-800 text-sand-100">
+                {userRole}
               </span>
             </div>
 
             <nav className="space-y-3 font-mono text-xs">
+              {userRole === "ADMIN" && (
+                <Link
+                  href="/dashboard/admin"
+                  className="flex items-center justify-between text-yellow-300 hover:text-yellow-100 transition font-bold group"
+                >
+                  <span className="tracking-wide">[★] ADMIN OPERATIONS CENTER</span>
+                  <ArrowUpRight size={14} className="opacity-90 group-hover:opacity-100 transition" />
+                </Link>
+              )}
+              {userRole === "MEMBER" && (
+                <Link
+                  href="/dashboard/member"
+                  className="flex items-center justify-between text-moss-200 hover:text-white transition font-bold group"
+                >
+                  <span className="tracking-wide">[★] MY MEMBER WORKSPACE</span>
+                  <ArrowUpRight size={14} className="opacity-90 group-hover:opacity-100 transition" />
+                </Link>
+              )}
               <Link
                 href={`/dashboard/projects/${selectedProjectId}/handover`}
                 className="flex items-center justify-between text-sand-200 hover:text-white transition group"

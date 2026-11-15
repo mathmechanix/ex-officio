@@ -6,24 +6,31 @@ export default function HomePage() {
     <div className="min-h-screen bg-sand-100 text-sand-950 font-sans selection:bg-moss-800 selection:text-white">
       {/* Editorial Header */}
       <header className="border-b border-sand-300 bg-sand-50/90 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-moss-700" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 group hover:opacity-90 transition"
+            title="Ex Officio Home"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-moss-700 group-hover:scale-125 transition-transform" />
             <span className="font-mono text-xs font-bold tracking-widest text-moss-950 uppercase">
               EX OFFICIO
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sand-200 text-sand-700 uppercase">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sand-200 text-sand-700 uppercase hidden sm:inline">
               EVIDENCE-FIRST HANDOVER
             </span>
-          </div>
+          </Link>
 
-          <div className="flex items-center gap-3 font-mono text-xs">
-            <Link href="/login" className="px-3 py-1.5 text-sand-700 hover:text-sand-950">
+          <div className="flex items-center gap-2 sm:gap-3 font-mono text-xs">
+            <Link
+              href="/login"
+              className="px-2.5 py-1.5 text-sand-700 hover:text-sand-950 min-h-[38px] flex items-center"
+            >
               SIGN IN
             </Link>
             <Link
               href="/dashboard"
-              className="px-3.5 py-1.5 rounded bg-moss-900 text-sand-50 font-semibold hover:bg-moss-800 transition"
+              className="px-3.5 py-1.5 rounded-xl bg-moss-900 text-sand-50 font-semibold hover:bg-moss-800 transition min-h-[38px] flex items-center shadow-xs"
             >
               LAUNCH DASHBOARD [↗]
             </Link>
@@ -47,17 +54,17 @@ export default function HomePage() {
             Ex Officio ingests git commits, pull requests, issues, and documentation to reconstruct architectural decisions, hidden dependencies, and unfinished tasks — with every conclusion linked to tamper-evident git references.
           </p>
 
-          <div className="mt-8 flex items-center gap-3 font-mono text-xs">
+          <div className="mt-8 flex flex-wrap items-center gap-3 font-mono text-xs">
             <Link
               href="/dashboard"
-              className="px-5 py-2.5 rounded bg-moss-900 text-sand-50 font-bold uppercase tracking-wider hover:bg-moss-800 transition shadow-sm inline-flex items-center gap-1.5"
+              className="px-5 py-3 rounded-xl bg-moss-900 text-sand-50 font-bold uppercase tracking-wider hover:bg-moss-800 transition shadow-sm inline-flex items-center gap-1.5 min-h-[44px]"
             >
               <span>EXPLORE DEMO WORKSPACE</span>
               <ArrowUpRight size={14} />
             </Link>
             <Link
               href="/dashboard/projects"
-              className="px-4 py-2.5 rounded bg-sand-200 hover:bg-sand-300 border border-sand-300 text-sand-900 font-bold uppercase tracking-wider transition"
+              className="px-4 py-3 rounded-xl bg-sand-200 hover:bg-sand-300 border border-sand-300 text-sand-900 font-bold uppercase tracking-wider transition min-h-[44px] inline-flex items-center"
             >
               CONNECT GITHUB REPO
             </Link>

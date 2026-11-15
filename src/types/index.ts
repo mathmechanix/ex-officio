@@ -186,3 +186,64 @@ export interface KnowledgeDocument {
   createdAt: string;
   contentSnippet?: string;
 }
+
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  leadId?: string;
+  createdAt: string;
+}
+
+export interface SubTeam {
+  id: string;
+  teamId: string;
+  name: string;
+  description: string;
+  leadId?: string;
+  createdAt: string;
+}
+
+export interface WorkLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  projectId: string;
+  projectName: string;
+  hours: number;
+  taskDescription: string;
+  logDate: string;
+  createdAt: string;
+}
+
+export interface HandoverQuestion {
+  id: string;
+  projectId: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  question: string;
+  answer?: string;
+  answeredBy?: string;
+  answeredAt?: string;
+  status: 'ANSWERED' | 'PENDING';
+  createdAt: string;
+}
+
+export interface MemberAdminProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  employeeId: string;
+  clearanceBadge: string;
+  teamId: string;
+  subTeamId: string;
+  workHoursWeekly: number;
+  status: 'ACTIVE' | 'ON_LEAVE' | 'INACTIVE';
+  avatar?: string;
+  hoursLoggedThisWeek: number;
+  assignedProjectsCount: number;
+  createdAt: string;
+}

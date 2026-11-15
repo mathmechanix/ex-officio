@@ -20,6 +20,8 @@ import {
   Settings,
   X,
   ShieldCheck,
+  ShieldAlert,
+  UserCheck,
   LogOut,
   Loader2,
 } from "lucide-react";
@@ -48,6 +50,8 @@ export function Sidebar({
 
   const mainNav = [
     { label: "Dashboard Overview", href: "/dashboard", icon: LayoutDashboard },
+    ...(userRole === "ADMIN" ? [{ label: "Admin Operations", href: "/dashboard/admin", icon: ShieldAlert }] : []),
+    ...(userRole === "MEMBER" ? [{ label: "Member Portal", href: "/dashboard/member", icon: UserCheck }] : []),
     { label: "All Projects", href: "/dashboard/projects", icon: FolderKanban },
   ];
 

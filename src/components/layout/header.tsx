@@ -13,6 +13,8 @@ import {
   Settings,
   LogOut,
   X,
+  ShieldAlert,
+  UserCheck,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -21,6 +23,8 @@ interface HeaderProps {
 
 const routeTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/dashboard/admin": "Operations Admin Console",
+  "/dashboard/member": "Engineering Member Portal",
   "/dashboard/projects": "Projects",
   "/dashboard/ai-analysis": "AI Analysis",
   "/dashboard/insights": "Insights",
@@ -88,17 +92,29 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 flex items-center h-[var(--header-height)] px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border">
-      {/* Left: Menu toggle + Title */}
+      {/* Left: Menu toggle + EX OFFICIO clickable logo + Title */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <button
           onClick={onMenuToggle}
-          className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
           aria-label="Toggle menu"
         >
           <Menu size={20} />
         </button>
 
-        <h2 className="text-lg font-semibold text-foreground truncate">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-sand-200/70 hover:bg-sand-300 transition group shrink-0"
+          title="Return to Dashboard"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-moss-700 group-hover:scale-125 transition-transform" />
+          <span className="font-mono text-xs font-bold tracking-widest text-moss-950 uppercase hidden sm:inline">
+            EX OFFICIO
+          </span>
+        </Link>
+
+        <span className="text-sand-400 hidden sm:inline">/</span>
+        <h2 className="text-sm font-semibold text-foreground truncate">
           {pageTitle}
         </h2>
       </div>
@@ -185,6 +201,26 @@ export function Header({ onMenuToggle }: HeaderProps) {
                 </p>
               </div>
               <div className="py-1">
+                {(session?.user as any)?.role === "ADMIN" && (
+                  <Link
+                    href="/dashboard/admin"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2 text-sm text-moss-900 font-bold hover:bg-moss-100 transition-colors"
+                  >
+                    <ShieldAlert size={16} />
+                    Admin Operations
+                  </Link>
+                )}
+                {(session?.user as any)?.role === "MEMBER" && (
+                  <Link
+                    href="/dashboard/member"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2 text-sm text-moss-900 font-bold hover:bg-moss-100 transition-colors"
+                  >
+                    <UserCheck size={16} />
+                    Member Portal
+                  </Link>
+                )}
                 <Link
                   href="/dashboard/profile"
                   onClick={() => setUserMenuOpen(false)}

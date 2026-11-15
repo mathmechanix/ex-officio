@@ -13,8 +13,31 @@ export async function POST(req: Request) {
       );
     }
 
-    await store.ready();
+    if (password.length < 6) {
+      return NextResponse.json(
+        { success: false, error: "Password must be at least 6 characters long." },
+        { status: 400 }
+      );
+    }
+
     const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return NextResponse.json(
+        { success: false, error: "Please enter a valid email address." },
+        { status: 400 }
+      );
+    }
+
+    // Attack Prevention: Rate limit registrations
+    const rateLimit = store.checkRateLimit(`reg-${cleanEmail}`, 5, 60000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many registration attempts. Please wait 1 minute." },
+        { status: 429 }
+      );
+    }
+
+    await store.ready();
     const existing = store.findUserByEmail(cleanEmail);
     if (existing) {
       return NextResponse.json(
@@ -24,10 +47,10 @@ export async function POST(req: Request) {
     }
 
     const newUser = store.createUser({
-      name: name.trim(),
+      name: name.trim().slice(0, 80),
       email: cleanEmail,
-      passwordHash: password, // In production, bcrypt.hashSync(password, 10)
-      role: role || "MEMBER",
+      passwordHash: password, // store.createUser auto-hashes with bcrypt
+      role: role === "ADMIN" ? "MEMBER" : (role || "MEMBER"), // public signups default to MEMBER
       avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80`,
     });
     await store.flush();

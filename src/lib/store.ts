@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { get as getBlob, put as putBlob } from '@vercel/blob';
 import { AUTH_SECRET } from '@/lib/auth-config';
+import { db } from '@/lib/db';
 import type { InsightCategory, SeverityLevel, InsightStatus } from '@/types';
 
 export interface StoredUser {
@@ -75,6 +77,10 @@ export interface StoredProject {
   repoOwner: string;
   repoName: string;
   lastSyncedAt: string;
+  teamId?: string;
+  subTeamId?: string;
+  isExclusive?: boolean;
+  creatorUserId?: string;
   departingMember: {
     name: string;
     role: string;
@@ -723,9 +729,29 @@ export const store = {
     await task;
   },
   // Users
-  getUsers: (): StoredUser[] => readStore().users,
+  getUsers: (): StoredUser[] => {
+    try {
+      const dbUsers = db.getUsers();
+      if (dbUsers && dbUsers.length > 0) {
+        return dbUsers;
+      }
+    } catch {}
+    return readStore().users;
+  },
   findUserByEmail: (email: string): StoredUser | undefined => {
-    return readStore().users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      const dbUser = db.findUserByEmail(cleanEmail);
+      if (dbUser) return dbUser;
+    } catch {}
+    return readStore().users.find((u) => u.email.toLowerCase() === cleanEmail);
+  },
+  findUserById: (id: string): StoredUser | undefined => {
+    try {
+      const dbUser = db.findUserById(id);
+      if (dbUser) return dbUser;
+    } catch {}
+    return readStore().users.find((u) => u.id === id);
   },
   updateUserName: (email: string, name: string): void => {
     const data = readStore();
@@ -734,16 +760,39 @@ export const store = {
       u.name = name;
       writeStore(data);
     }
+    try {
+      const dbUser = db.findUserByEmail(email);
+      if (dbUser) {
+        db.updateUser(dbUser.id, { name });
+      }
+    } catch {}
   },
   createUser: (user: Omit<StoredUser, 'id' | 'createdAt'>): StoredUser => {
     const data = readStore();
+    const isAlreadyHashed = user.passwordHash.startsWith('$2a$') || user.passwordHash.startsWith('$2b$');
+    const finalPasswordHash = isAlreadyHashed ? user.passwordHash : bcrypt.hashSync(user.passwordHash, 10);
+
     const newUser: StoredUser = {
       ...user,
+      passwordHash: finalPasswordHash,
       id: `usr-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
     data.users.push(newUser);
     writeStore(data);
+
+    try {
+      db.createUser({
+        name: user.name,
+        email: user.email,
+        password: user.passwordHash, // db.createUser will hash or store cleanly
+        role: user.role,
+        avatar: user.avatar,
+      });
+    } catch (e) {
+      console.warn('DB create user sync note:', e);
+    }
+
     return newUser;
   },
 
@@ -752,31 +801,44 @@ export const store = {
   getProjectById: (id: string): StoredProject | undefined => {
     return readStore().projects.find((p) => p.id === id || p.slug === id) || readStore().projects[0];
   },
-  createProject: (proj: Omit<StoredProject, 'id' | 'lastSyncedAt'>): StoredProject => {
+  createProject: (proj: Partial<StoredProject> & { name: string }): any => {
+    // Persist to SQLite DB
+    const dbProject = db.createProject({
+      name: proj.name,
+      slug: proj.slug || proj.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      description: proj.description || 'Enterprise knowledge handover workspace',
+      status: proj.status || 'HANDOVER_IN_PROGRESS',
+      techStack: proj.techStack || ['TypeScript', 'Next.js'],
+      repoOwner: proj.repoOwner || 'acme-corp',
+      repoName: proj.repoName || (proj.slug || proj.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')),
+      teamId: proj.teamId || 'team-platform',
+      subTeamId: proj.subTeamId || 'sub-auth',
+      isExclusive: proj.isExclusive !== undefined ? proj.isExclusive : true,
+      departingMember: proj.departingMember,
+      creatorUserId: proj.creatorUserId,
+    });
+
+    // Also sync in-memory json store
     const data = readStore();
-    const id = `proj-${Date.now()}`;
     const newProject: StoredProject = {
-      ...proj,
-      id,
-      lastSyncedAt: 'Just now',
-      departingMember: {
-        ...proj.departingMember,
-        avatar:
-          proj.departingMember.avatar ||
-          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
-      },
+      id: dbProject.id,
+      name: dbProject.name,
+      slug: dbProject.slug,
+      description: dbProject.description,
+      status: dbProject.status,
+      techStack: dbProject.techStack,
+      repoOwner: dbProject.repoOwner,
+      repoName: dbProject.repoName,
+      lastSyncedAt: dbProject.lastSyncedAt,
+      teamId: dbProject.teamId,
+      subTeamId: dbProject.subTeamId,
+      isExclusive: dbProject.isExclusive,
+      creatorUserId: proj.creatorUserId,
+      departingMember: dbProject.departingMember,
     };
     data.projects.unshift(newProject);
-    data.handovers.push({
-      projectId: id,
-      status: 'IN_REVIEW',
-      transitionSteps: [
-        { id: `step-${Date.now()}-1`, task: 'Complete knowledge base documentation upload', owner: 'Team Lead', done: false },
-        { id: `step-${Date.now()}-2`, task: 'Approve AI insights and publish report', owner: 'Project Lead', done: false },
-      ],
-    });
     writeStore(data);
-    return newProject;
+    return dbProject;
   },
   updateProjectSync: (projectId: string): void => {
     const data = readStore();
@@ -1239,5 +1301,79 @@ export const store = {
     const data = readStore();
     data.geminiApiKey = key.trim();
     writeStore(data);
+  },
+
+  // Database Bridges & Extended Operations
+  getTeams: () => db.getTeams(),
+  getSubTeams: (teamId?: string) => db.getSubTeams(teamId),
+  createTeam: (name: string, description: string, leadId?: string) => db.createTeam(name, description, leadId),
+  createSubTeam: (teamId: string, name: string, description: string, leadId?: string) => db.createSubTeam(teamId, name, description, leadId),
+  getProjectMembers: (projectId: string) => db.getProjectMembers(projectId),
+  assignMemberToProject: (projectId: string, userId: string, role?: string) => db.assignMemberToProject(projectId, userId, role),
+  removeMemberFromProject: (projectId: string, userId: string) => db.removeMemberFromProject(projectId, userId),
+  getHandoverQuestions: (projectId: string) => db.getHandoverQuestions(projectId),
+  addHandoverQuestion: (
+    projectIdOrData: string | { projectId: string; userId: string; userName: string; userRole: string; question: string },
+    question?: string,
+    userName?: string,
+    userRole?: string
+  ) => {
+    if (typeof projectIdOrData === "object") {
+      return db.addHandoverQuestion(projectIdOrData);
+    }
+    return db.addHandoverQuestion({
+      projectId: projectIdOrData,
+      question: question || "",
+      userId: `usr-anon-${Date.now().toString(36)}`,
+      userName: userName || "Team Member",
+      userRole: userRole || "MEMBER",
+    });
+  },
+  answerHandoverQuestion: (questionId: string, answer: string, answeredBy: string) =>
+    db.answerHandoverQuestion(questionId, answer, answeredBy),
+  getWorkLogs: (userId?: string, projectId?: string) => db.getWorkLogs(userId, projectId),
+  getWorkLogsForProject: (projectId: string) => db.getWorkLogs(undefined, projectId),
+  addWorkLog: (data: { userId: string; userName: string; userRole: string; projectId: string; projectName: string; hours: number; taskDescription: string; logDate?: string }) => db.addWorkLog(data),
+  checkRateLimit: (key: string, maxAttempts?: number, windowMs?: number) => db.checkRateLimit(key, maxAttempts, windowMs),
+  updateUser: (id: string, updates: any) => db.updateUser(id, updates),
+  createMember: (data: Parameters<typeof db.createUser>[0]) => db.createUser(data),
+  getDbUsers: () => db.getUsers(),
+  userCanAccessProject: (userId?: string, userRole?: string, projectId?: string) => db.userCanAccessProject(userId, userRole, projectId),
+  getProjectsForUser: (userId?: string, userRole?: string) => db.getProjects(userId, userRole),
+  getAllMembersWithMetrics: () => {
+    const users = db.getUsers();
+    const teams = db.getTeams();
+    const subTeams = db.getSubTeams();
+    const allWorkLogs = db.getWorkLogs();
+
+    return users.map((u) => {
+      const userLogs = allWorkLogs.filter((w) => w.userId === u.id);
+      const hoursLoggedTotal = userLogs.reduce((acc, l) => acc + (Number(l.hours) || 0), 0);
+      const team = teams.find((t) => t.id === u.teamId);
+      const subTeam = subTeams.find((s) => s.id === u.subTeamId);
+
+      // count assigned projects
+      const projects = db.getProjects(u.id, u.role);
+      const assignedProjectsCount = u.role === "ADMIN" ? projects.length : projects.length;
+
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        avatar: u.avatar,
+        employeeId: u.employeeId,
+        clearanceBadge: u.clearanceBadge,
+        teamId: u.teamId,
+        teamName: team ? team.name : "Platform Engineering",
+        subTeamId: u.subTeamId,
+        subTeamName: subTeam ? subTeam.name : "Core Infrastructure",
+        workHoursWeekly: u.workHoursWeekly || 40,
+        hoursLoggedTotal,
+        assignedProjectsCount,
+        status: u.status || "ACTIVE",
+        createdAt: u.createdAt,
+      };
+    });
   },
 };
