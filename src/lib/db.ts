@@ -57,6 +57,7 @@ export interface DbProject {
   teamId: string;
   subTeamId: string;
   isExclusive: boolean;
+  creatorUserId?: string;
   lastSyncedAt: string;
   departingMember: {
     name: string;
@@ -218,6 +219,39 @@ export interface DbTeamMessage {
   createdAt: string;
 }
 
+export const DEMO_EMAILS = new Set([
+  'admin@exofficio.dev',
+  'lead@exofficio.dev',
+  'priya.sharma@acme.com',
+  'alex.chen@acme.com',
+  'demo@exofficio.dev',
+]);
+
+export const DEMO_USER_IDS = new Set([
+  'usr-admin-01',
+  'usr-lead-01',
+  'usr-member-02',
+  'usr-member-03',
+  'usr-demo-01',
+]);
+
+export const DEMO_PROJECT_IDS = new Set([
+  'proj-apollo-9',
+  'proj-mercury-2',
+  'proj-nexus-vault',
+]);
+
+export function isDemoAccount(userId?: string, email?: string): boolean {
+  if (email && DEMO_EMAILS.has(email.toLowerCase().trim())) return true;
+  if (userId && (DEMO_USER_IDS.has(userId) || userId.startsWith('usr-demo-') || userId.startsWith('demo-'))) return true;
+  return false;
+}
+
+export function isDemoProject(projectId?: string): boolean {
+  if (!projectId) return false;
+  return DEMO_PROJECT_IDS.has(projectId);
+}
+
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const DB_DIR = isServerless ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'exofficio.db');
@@ -304,6 +338,7 @@ function initSchema(db: any) {
       team_id TEXT NOT NULL DEFAULT 'team-platform',
       sub_team_id TEXT NOT NULL DEFAULT 'sub-auth',
       is_exclusive INTEGER NOT NULL DEFAULT 1,
+      creator_user_id TEXT,
       last_synced_at TEXT,
       departing_member_json TEXT NOT NULL,
       created_at TEXT NOT NULL
@@ -465,6 +500,10 @@ function initSchema(db: any) {
     CREATE INDEX IF NOT EXISTS idx_questions_project ON handover_questions(project_id);
     CREATE INDEX IF NOT EXISTS idx_work_logs_user ON work_logs(user_id);
   `);
+
+  try {
+    db.exec('ALTER TABLE projects ADD COLUMN creator_user_id TEXT;');
+  } catch {}
 }
 
 function seedInitialData(db: any) {
@@ -1098,7 +1137,7 @@ export const db = {
         id, name, slug, description, status, tech_stack as techStack, 
         repo_owner as repoOwner, repo_name as repoName, 
         team_id as teamId, sub_team_id as subTeamId, 
-        is_exclusive as isExclusive, last_synced_at as lastSyncedAt, 
+        is_exclusive as isExclusive, creator_user_id as creatorUserId, last_synced_at as lastSyncedAt, 
         departing_member_json as departingMemberJson, created_at as createdAt
       FROM projects;
     `).all();
@@ -1110,28 +1149,46 @@ export const db = {
       departingMember: JSON.parse(r.departingMemberJson || '{}'),
     }));
 
-    // If Admin, they see ALL projects
-    if (userRole === 'ADMIN') {
-      return parsed;
+    const user = userId ? db.findUserById(userId) : undefined;
+    const isDemo = userId ? isDemoAccount(userId, user?.email) : true;
+
+    // NON-DEMO / NEWLY CREATED ACCOUNTS: STRICT DATA ISOLATION
+    // Must NEVER see demo projects (Apollo 9, Mercury 2, Nexus Vault).
+    // Dashboard is blank (0 projects) until they connect or are added to a project.
+    if (!isDemo) {
+      if (!userId) return [];
+      const nonDemoProjects = parsed.filter((p) => !DEMO_PROJECT_IDS.has(p.id));
+      const memberRows = inst.prepare(`SELECT project_id FROM project_members WHERE user_id = ?;`).all(userId) as any[];
+      const allowedIds = new Set(memberRows.map((m) => m.project_id));
+
+      return nonDemoProjects.filter((p) => {
+        if (allowedIds.has(p.id)) return true;
+        if (p.creatorUserId === userId) return true;
+        return false;
+      });
     }
 
-    // If userId provided, enforce project exclusivity:
-    // Only return projects where the user is an assigned member, OR created by them
+    // DEMO ACCOUNTS:
+    // If Admin demo account, see all demo projects
+    if (userRole === 'ADMIN') {
+      return parsed.filter((p) => DEMO_PROJECT_IDS.has(p.id));
+    }
+
     if (userId) {
       const memberRows = inst.prepare(`SELECT project_id FROM project_members WHERE user_id = ?;`).all(userId) as any[];
       const allowedIds = new Set(memberRows.map((m) => m.project_id));
-      const user = db.findUserById(userId);
 
       return parsed.filter((p) => {
+        if (!DEMO_PROJECT_IDS.has(p.id)) return false;
         if (allowedIds.has(p.id)) return true;
         if (user && p.departingMember?.name === user.name) return true;
-        // Non-exclusive projects are visible to all members
         if (!p.isExclusive) return true;
         return false;
       });
     }
 
-    return parsed;
+    // Public explore demo: return demo projects
+    return parsed.filter((p) => DEMO_PROJECT_IDS.has(p.id));
   },
 
   getProjectById: (projectId: string): DbProject | undefined => {
@@ -1141,7 +1198,7 @@ export const db = {
         id, name, slug, description, status, tech_stack as techStack, 
         repo_owner as repoOwner, repo_name as repoName, 
         team_id as teamId, sub_team_id as subTeamId, 
-        is_exclusive as isExclusive, last_synced_at as lastSyncedAt, 
+        is_exclusive as isExclusive, creator_user_id as creatorUserId, last_synced_at as lastSyncedAt, 
         departing_member_json as departingMemberJson, created_at as createdAt
       FROM projects WHERE id = ?;
     `).get(projectId) as any;
@@ -1157,7 +1214,31 @@ export const db = {
 
   userCanAccessProject: (userId?: string, userRole?: string, projectId?: string): boolean => {
     if (!projectId) return false;
-    if (userRole === 'ADMIN') return true;
+
+    // 1. If accessing a DEMO project (Apollo, Mercury, Nexus)
+    if (isDemoProject(projectId)) {
+      if (!userId) {
+        // Public explore is allowed for demo projects
+        return true;
+      }
+      const user = db.findUserById(userId);
+      const isDemo = isDemoAccount(userId, user?.email);
+      // NON-DEMO ACCOUNTS CAN NEVER ACCESS DEMO DATA!
+      if (!isDemo) {
+        return false;
+      }
+      if (userRole === 'ADMIN') return true;
+
+      const inst = getDbInstance();
+      const member = inst.prepare(`SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?;`).get(projectId, userId);
+      if (member) return true;
+      const proj = db.getProjectById(projectId);
+      if (user && proj?.departingMember?.name === user.name) return true;
+      if (proj && !proj.isExclusive) return true;
+      return false;
+    }
+
+    // 2. If accessing a USER-CREATED / NON-DEMO project
     if (!userId) return false;
 
     const inst = getDbInstance();
@@ -1166,10 +1247,8 @@ export const db = {
 
     const proj = db.getProjectById(projectId);
     if (!proj) return false;
+    if (proj.creatorUserId === userId) return true;
     if (!proj.isExclusive) return true;
-
-    const user = db.findUserById(userId);
-    if (user && proj.departingMember?.name === user.name) return true;
 
     return false;
   },
@@ -1200,8 +1279,8 @@ export const db = {
     };
 
     inst.prepare(`
-      INSERT INTO projects (id, name, slug, description, status, tech_stack, repo_owner, repo_name, team_id, sub_team_id, is_exclusive, last_synced_at, departing_member_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      INSERT INTO projects (id, name, slug, description, status, tech_stack, repo_owner, repo_name, team_id, sub_team_id, is_exclusive, creator_user_id, last_synced_at, departing_member_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     `).run(
       id,
       data.name.trim(),
@@ -1209,11 +1288,12 @@ export const db = {
       data.description || 'Continuous knowledge handover workspace',
       data.status || 'HANDOVER_IN_PROGRESS',
       JSON.stringify(data.techStack || ['TypeScript', 'Next.js']),
-      data.repoOwner || 'acme-corp',
+      data.repoOwner || 'repository',
       data.repoName || slug,
       data.teamId || 'team-platform',
       data.subTeamId || 'sub-auth',
       data.isExclusive !== undefined ? (data.isExclusive ? 1 : 0) : 1,
+      data.creatorUserId || null,
       'Just now',
       JSON.stringify(departingMember),
       now

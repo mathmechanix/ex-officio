@@ -50,10 +50,7 @@ export default function AIAnalysisPage() {
       const res = await fetch(`/api/projects/${projectId}/analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: "Apollo Core Platform",
-          departingMemberName: "Alex Chen",
-        }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (data.success && data.insights) {

@@ -125,7 +125,8 @@ export default function TimelinePage() {
     },
   ];
 
-  const events = timelineEvents.length > 0 ? timelineEvents : defaultEvents;
+  const isApollo = projectId === "proj-apollo-9";
+  const events = timelineEvents.length > 0 ? timelineEvents : isApollo ? defaultEvents : [];
 
   const filteredEvents = events.filter((e) => {
     const matchesFilter = activeFilter === "ALL" || e.type === activeFilter;
@@ -208,6 +209,24 @@ export default function TimelinePage() {
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-32 bg-sand-200 rounded-2xl border border-sand-300" />
           ))}
+        </div>
+      ) : filteredEvents.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-3 font-sans max-w-lg mx-auto shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-sand-200 text-moss-900 mx-auto flex items-center justify-center font-bold text-xs">
+            00
+          </div>
+          <h4 className="font-bold text-sm text-sand-950">No Activity Events Recorded</h4>
+          <p className="text-xs text-sand-600">
+            No git commits, pull requests, decisions, or meeting minutes recorded yet for this project. Sync your GitHub repository or upload documentation to populate the activity stream.
+          </p>
+          <div className="pt-2">
+            <Link
+              href={`/dashboard/projects/${projectId}/github`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-moss-900 text-sand-50 font-mono text-xs font-bold uppercase hover:bg-moss-800 transition"
+            >
+              SYNC FROM GITHUB
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="relative pl-6 border-l border-sand-300 space-y-6 my-6 ml-3">

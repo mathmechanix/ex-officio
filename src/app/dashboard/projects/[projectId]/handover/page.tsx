@@ -172,31 +172,33 @@ export default function HandoverDashboardPage() {
     }
   };
 
+  const isApollo = projectId === "proj-apollo-9";
+
   const project = summaryData?.project || {
-    name: "Apollo Core Platform",
-    repoOwner: "acme-corp",
-    repoName: "apollo-core",
+    name: isApollo ? "Apollo Core Platform" : "Project Handover Workspace",
+    repoOwner: isApollo ? "acme-corp" : "repository",
+    repoName: isApollo ? "apollo-core" : "workspace",
     departingMember: {
-      name: "Alex Chen",
-      role: "Principal Backend Architect",
-      leavingDate: "November 14, 2026 (in 4 days)",
+      name: isApollo ? "Alex Chen" : "Unassigned",
+      role: isApollo ? "Principal Backend Architect" : "Key Contributor",
+      leavingDate: isApollo ? "November 14, 2026 (in 4 days)" : "In Schedule",
       avatar:
         "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
-      criticalOwnership: "68% of Auth, 82% of Kafka Consumer modules",
+      criticalOwnership: isApollo ? "68% of Auth, 82% of Kafka Consumer modules" : "Core Modules",
     },
   };
 
   const departingMember = {
-    name: project.departingMember?.name || "Alex Chen",
-    role: project.departingMember?.role || "Principal Backend Architect",
-    leavingDate: project.departingMember?.leavingDate || "November 14, 2026",
-    tenure: "2 years, 8 months",
-    successor: "Priya Sharma (Incoming Lead)",
+    name: project.departingMember?.name || (isApollo ? "Alex Chen" : "Unassigned"),
+    role: project.departingMember?.role || (isApollo ? "Principal Backend Architect" : "Key Contributor"),
+    leavingDate: project.departingMember?.leavingDate || (isApollo ? "November 14, 2026" : "In Schedule"),
+    tenure: isApollo ? "2 years, 8 months" : "Active Member",
+    successor: isApollo ? "Priya Sharma (Incoming Lead)" : "Assigned Successor",
   };
 
   const insights: any[] = summaryData?.insights || [];
   const documents: any[] = summaryData?.documents || [];
-  const readinessScore = summaryData?.metrics?.readinessScore ?? 78;
+  const readinessScore = summaryData?.metrics?.readinessScore ?? (isApollo ? 78 : 0);
 
   // Categorize live insights for the 6 questions
   const decisionInsights = insights.filter((i) => i.category === "TECHNICAL_DECISION" && i.status !== "REJECTED");

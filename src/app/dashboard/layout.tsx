@@ -48,15 +48,35 @@ export default function DashboardLayout({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const pathname = usePathname();
+  const [activeProject, setActiveProject] = useState<{ id: string; name: string } | null>(null);
 
   const projectMatch = pathname.match(/\/dashboard\/projects\/([^/]+)/);
-  const currentProjectId =
-    projectMatch?.[1] && projectMatch[1] !== "new" ? projectMatch[1] : "proj-apollo-9";
+  const routeProjectId = projectMatch?.[1] && projectMatch[1] !== "new" ? projectMatch[1] : undefined;
 
-  // Refresh notification count periodically and on route changes
+  // Refresh active project and notification count
   useEffect(() => {
     if (status !== "authenticated") return;
     let active = true;
+
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!active) return;
+        if (data.success && Array.isArray(data.projects) && data.projects.length > 0) {
+          const match = routeProjectId
+            ? data.projects.find((p: any) => p.id === routeProjectId)
+            : data.projects[0];
+          if (match) {
+            setActiveProject({ id: match.id, name: match.name });
+          } else {
+            setActiveProject({ id: data.projects[0].id, name: data.projects[0].name });
+          }
+        } else {
+          setActiveProject(null);
+        }
+      })
+      .catch(() => {});
+
     fetch("/api/notifications")
       .then((r) => r.json())
       .then((data) => {
@@ -65,10 +85,14 @@ export default function DashboardLayout({
         }
       })
       .catch(() => {});
+
     return () => {
       active = false;
     };
-  }, [pathname, status]);
+  }, [pathname, status, routeProjectId]);
+
+  const currentProjectId = routeProjectId || activeProject?.id || "";
+  const currentProjectName = activeProject?.name || "";
 
   // Global keyboard shortcut (Ctrl+K or /) and click outside handler
   useEffect(() => {
@@ -150,7 +174,7 @@ export default function DashboardLayout({
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         currentProjectId={currentProjectId}
-        currentProjectName="Apollo Core Platform"
+        currentProjectName={currentProjectName}
         unreadCount={unreadCount}
       />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -15,25 +15,60 @@ import {
 export default function GitHubPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
+  const isApollo = projectId === "proj-apollo-9";
 
   const [activeTab, setActiveTab] = useState<"COMMITS" | "PRS" | "ISSUES">("COMMITS");
   const [syncing, setSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState("");
-  const [lastSyncedAt, setLastSyncedAt] = useState("12 mins ago");
+  const [lastSyncedAt, setLastSyncedAt] = useState("Just now");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const repo = {
-    owner: "acme-corp",
-    name: "apollo-core",
-    fullName: "acme-corp/apollo-core",
-    defaultBranch: "main",
-    url: "https://github.com/acme-corp/apollo-core",
-    commitsCount: 412,
-    openPrs: 2,
-    openIssues: 2,
+  const [projectData, setProjectData] = useState<any>(null);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = () => {
+    Promise.all([
+      fetch(`/api/projects/${projectId}/summary`).then((r) => r.json()),
+      fetch(`/api/projects/${projectId}/timeline`).then((r) => r.json()),
+    ])
+      .then(([summaryRes, timelineRes]) => {
+        if (summaryRes.success) {
+          setProjectData(summaryRes.project);
+          if (summaryRes.project?.lastSyncedAt) {
+            setLastSyncedAt(summaryRes.project.lastSyncedAt);
+          }
+        }
+        if (timelineRes.success) setTimelineEvents(timelineRes.events || []);
+      })
+      .catch((err) => console.error("GitHub data load failed:", err))
+      .finally(() => setLoading(false));
   };
 
-  const commits = [
+  useEffect(() => {
+    loadData();
+  }, [projectId]);
+
+  const repoOwner = projectData?.repoOwner || (isApollo ? "acme-corp" : "repository");
+  const repoName = projectData?.repoName || (isApollo ? "apollo-core" : "workspace");
+  const repoFullName = `${repoOwner}/${repoName}`;
+
+  const commitEvents = timelineEvents.filter((e) => e.type === "COMMIT");
+  const prEvents = timelineEvents.filter((e) => e.type === "PULL_REQUEST");
+  const issueEvents = timelineEvents.filter((e) => e.type === "ISSUE");
+
+  const repo = {
+    owner: repoOwner,
+    name: repoName,
+    fullName: repoFullName,
+    defaultBranch: "main",
+    url: `https://github.com/${repoFullName}`,
+    commitsCount: isApollo ? 412 : commitEvents.length,
+    openPrs: isApollo ? 2 : prEvents.length,
+    openIssues: isApollo ? 2 : issueEvents.length,
+  };
+
+  const sampleCommits = [
     {
       sha: "c8f49b1",
       fullSha: "c8f49b189a74130f40d1109a",
@@ -86,7 +121,24 @@ export default function GitHubPage() {
     },
   ];
 
-  const prs = [
+  const commits = isApollo
+    ? sampleCommits
+    : commitEvents.map((evt) => {
+        const shaMatch = evt.title.match(/\[([a-f0-9]+)\]/i);
+        const sha = shaMatch ? shaMatch[1] : (evt.id.replace(/[^a-f0-9]/g, "").slice(0, 7) || "commit");
+        return {
+          sha,
+          fullSha: sha + "000000000000",
+          message: evt.title.replace(/^Commit \[[a-f0-9]+\]: /i, ""),
+          author: evt.author || "Git Contributor",
+          date: evt.occurredAt || "Recently",
+          additions: "+12",
+          deletions: "-3",
+          isLinkedToHandover: Boolean(evt.aiLinked),
+        };
+      });
+
+  const samplePrs = [
     {
       number: 42,
       title: "Webhook pipeline updates with HMAC verification",
@@ -95,7 +147,7 @@ export default function GitHubPage() {
       mergedAt: "5 hours ago",
       comments: 7,
       isLinkedToHandover: true,
-      url: "https://github.com/acme-corp/apollo-core/pull/42",
+      url: `https://github.com/${repoFullName}/pull/42`,
     },
     {
       number: 48,
@@ -105,11 +157,24 @@ export default function GitHubPage() {
       mergedAt: "In Review",
       comments: 14,
       isLinkedToHandover: true,
-      url: "https://github.com/acme-corp/apollo-core/pull/48",
+      url: `https://github.com/${repoFullName}/pull/48`,
     },
   ];
 
-  const issues = [
+  const prs = isApollo
+    ? samplePrs
+    : prEvents.map((evt, idx) => ({
+        number: idx + 1,
+        title: evt.title,
+        author: evt.author || "Git Contributor",
+        state: "MERGED",
+        mergedAt: evt.occurredAt || "Recently",
+        comments: 0,
+        isLinkedToHandover: Boolean(evt.aiLinked),
+        url: evt.sourceUrl || `https://github.com/${repoFullName}`,
+      }));
+
+  const sampleIssues = [
     {
       number: 104,
       title: "Kafka consumer group rebalance timeout under sustained traffic",
@@ -118,7 +183,7 @@ export default function GitHubPage() {
       labels: ["bug", "critical", "kafka"],
       assignee: "Alex Chen (Departing)",
       isCritical: true,
-      url: "https://github.com/acme-corp/apollo-core/issues/104",
+      url: `https://github.com/${repoFullName}/issues/104`,
     },
     {
       number: 98,
@@ -128,9 +193,22 @@ export default function GitHubPage() {
       labels: ["database", "security"],
       assignee: "Alex Chen",
       isCritical: false,
-      url: "https://github.com/acme-corp/apollo-core/issues/98",
+      url: `https://github.com/${repoFullName}/issues/98`,
     },
   ];
+
+  const issues = isApollo
+    ? sampleIssues
+    : issueEvents.map((evt, idx) => ({
+        number: idx + 1,
+        title: evt.title,
+        author: evt.author || "Reporter",
+        state: "OPEN",
+        labels: ["continuity", "documentation"],
+        assignee: "Assigned Lead",
+        isCritical: false,
+        url: evt.sourceUrl || `https://github.com/${repoFullName}`,
+      }));
 
   const handleSync = async () => {
     setSyncing(true);
@@ -142,9 +220,10 @@ export default function GitHubPage() {
         setLastSyncedAt(data.lastSyncedAt || "Just now");
         setSyncFeedback(data.message);
         setTimeout(() => setSyncFeedback(""), 4000);
+        loadData();
       }
-    } catch (err) {
-      console.error("Sync failed:", err);
+    } catch {
+      setSyncFeedback("Failed to sync GitHub repository.");
     } finally {
       setSyncing(false);
     }
@@ -290,6 +369,26 @@ export default function GitHubPage() {
 
       {/* Tab Content Lists */}
       <div className="space-y-2.5">
+        {activeTab === "COMMITS" && filteredCommits.length === 0 && (
+          <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-3 font-sans">
+            <div className="w-10 h-10 rounded-xl bg-sand-200 text-moss-900 mx-auto flex items-center justify-center font-bold text-xs">
+              00
+            </div>
+            <h4 className="font-bold text-sm text-sand-950">No Commits Synced Yet</h4>
+            <p className="text-xs text-sand-600 max-w-md mx-auto">
+              Sync this repository with GitHub to ingest commits, branch activity, and code changes into your unified continuity timeline.
+            </p>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-moss-900 text-sand-50 font-mono text-xs font-bold uppercase hover:bg-moss-800 transition"
+            >
+              {syncing ? <RefreshCw className="animate-spin w-3.5 h-3.5" /> : null}
+              <span>SYNC REPOSITORY FROM GITHUB</span>
+            </button>
+          </div>
+        )}
+
         {activeTab === "COMMITS" &&
           filteredCommits.map((c) => (
             <div
@@ -316,7 +415,7 @@ export default function GitHubPage() {
                   </span>
                 )}
                 <a
-                  href={`https://github.com/acme-corp/apollo-core/commit/${c.fullSha}`}
+                  href={`https://github.com/${repoFullName}/commit/${c.fullSha}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-sand-600 hover:text-sand-950 p-1"
@@ -327,6 +426,15 @@ export default function GitHubPage() {
               </div>
             </div>
           ))}
+
+        {activeTab === "PRS" && filteredPrs.length === 0 && (
+          <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-2 font-sans">
+            <h4 className="font-bold text-sm text-sand-950">No Pull Requests Recorded</h4>
+            <p className="text-xs text-sand-600 max-w-md mx-auto">
+              No merged or open pull requests found for {repoFullName}.
+            </p>
+          </div>
+        )}
 
         {activeTab === "PRS" &&
           filteredPrs.map((pr) => (
@@ -372,6 +480,15 @@ export default function GitHubPage() {
               </div>
             </div>
           ))}
+
+        {activeTab === "ISSUES" && filteredIssues.length === 0 && (
+          <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-2 font-sans">
+            <h4 className="font-bold text-sm text-sand-950">No Open Continuity Issues</h4>
+            <p className="text-xs text-sand-600 max-w-md mx-auto">
+              No unresolved issues or bug reports recorded for {repoFullName}.
+            </p>
+          </div>
+        )}
 
         {activeTab === "ISSUES" &&
           filteredIssues.map((iss) => (

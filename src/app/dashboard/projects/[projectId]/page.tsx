@@ -42,37 +42,43 @@ export default function ProjectDetailsPage() {
   }, [projectId]);
 
   const storedProject = summaryData?.project;
+  const isApollo = projectId === "proj-apollo-9";
+
   const metrics = summaryData?.metrics || {
-    documentsCount: 3,
-    insightsCount: 4,
-    timelineCount: 6,
-    highRiskCount: 3,
-    readinessScore: 78,
+    documentsCount: isApollo ? 3 : 0,
+    insightsCount: isApollo ? 4 : 0,
+    timelineCount: isApollo ? 6 : 0,
+    highRiskCount: isApollo ? 3 : 0,
+    readinessScore: isApollo ? 78 : 0,
   };
   const handoverStatus = summaryData?.handover?.status || "IN_REVIEW";
 
   const project = {
     id: projectId,
-    name: storedProject?.name || "Apollo Core Platform",
-    slug: storedProject?.slug || "apollo-core",
+    name: storedProject?.name || (isApollo ? "Apollo Core Platform" : "Project Workspace"),
+    slug: storedProject?.slug || (isApollo ? "apollo-core" : "workspace"),
     description:
       storedProject?.description ||
-      "High-throughput distributed event broker and transaction processor for enterprise financial workloads with zero-downtime consensus.",
+      (isApollo
+        ? "High-throughput distributed event broker and transaction processor for enterprise financial workloads with zero-downtime consensus."
+        : "Continuous knowledge handover workspace."),
     status: storedProject?.status || "HANDOVER_IN_PROGRESS",
-    techStack: storedProject?.techStack || ["TypeScript", "Next.js", "PostgreSQL", "Prisma", "Apache Kafka", "Redis"],
+    techStack: storedProject?.techStack || (isApollo ? ["TypeScript", "Next.js", "PostgreSQL", "Prisma", "Apache Kafka", "Redis"] : ["TypeScript", "Next.js"]),
     departingMember: {
-      name: storedProject?.departingMember?.name || "Alex Chen",
-      role: storedProject?.departingMember?.role || "Principal Backend Architect",
-      leavingIn: storedProject?.departingMember?.leavingDate || "in 4 days",
+      name: storedProject?.departingMember?.name || (isApollo ? "Alex Chen" : "Unassigned"),
+      role: storedProject?.departingMember?.role || (isApollo ? "Principal Backend Architect" : "Key Contributor"),
+      leavingIn: storedProject?.departingMember?.leavingDate || (isApollo ? "in 4 days" : "In Schedule"),
       avatar:
         storedProject?.departingMember?.avatar ||
-        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
-      criticalOwnership: storedProject?.departingMember?.criticalOwnership || "82% of Auth & Kafka Modules",
+        (isApollo
+          ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
+          : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80"),
+      criticalOwnership: storedProject?.departingMember?.criticalOwnership || (isApollo ? "82% of Auth & Kafka Modules" : "Core Repository Modules"),
     },
     stats: {
-      commits: 412,
-      pullRequests: 68,
-      unresolvedIssues: 12,
+      commits: summaryData?.metrics?.commitsCount ?? (isApollo ? 412 : metrics.timelineCount),
+      pullRequests: summaryData?.metrics?.prsCount ?? (isApollo ? 68 : 0),
+      unresolvedIssues: summaryData?.metrics?.issuesCount ?? (isApollo ? 12 : 0),
       documents: metrics.documentsCount,
       aiInsights: metrics.insightsCount,
       continuityReadiness: metrics.readinessScore,

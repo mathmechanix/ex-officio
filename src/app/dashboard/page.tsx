@@ -8,26 +8,39 @@ import { ChevronDown, ArrowUpRight, Loader2 } from "lucide-react";
 export default function DashboardOverviewPage() {
   const { data: session } = useSession();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("10:00 am");
-  const [selectedProjectId, setSelectedProjectId] = useState("proj-apollo-9");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [availableProjects, setAvailableProjects] = useState<any[]>([]);
   const [summaryData, setSummaryData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/projects")
       .then((res) => res.json())
       .then((data) => {
-        if (data.success && data.projects?.length > 0) {
-          setAvailableProjects(data.projects);
-          if (!data.projects.some((p: any) => p.id === selectedProjectId)) {
-            setSelectedProjectId(data.projects[0].id);
+        if (data.success) {
+          const list = data.projects || [];
+          setAvailableProjects(list);
+          if (list.length > 0) {
+            setSelectedProjectId(list[0].id);
+          } else {
+            setSelectedProjectId("");
+            setLoading(false);
           }
         }
       })
-      .catch((err) => console.error("Failed to load user projects:", err));
+      .catch((err) => console.error("Failed to load user projects:", err))
+      .finally(() => {
+        setProjectsLoaded(true);
+      });
   }, []);
 
   useEffect(() => {
+    if (!selectedProjectId) {
+      setSummaryData(null);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     fetch(`/api/projects/${selectedProjectId}/summary`)
@@ -46,17 +59,17 @@ export default function DashboardOverviewPage() {
     };
   }, [selectedProjectId]);
 
-  const userName = session?.user?.name || "Sarah Connor";
+  const userName = session?.user?.name || "Team Member";
   const userRole = (session?.user as any)?.role || "PROJECT_LEAD";
 
   const metrics = summaryData?.metrics || {
-    documentsCount: 3,
-    insightsCount: 4,
-    timelineCount: 6,
-    approvedCount: 1,
-    highRiskCount: 3,
-    needsReviewCount: 3,
-    readinessScore: 78,
+    documentsCount: 0,
+    insightsCount: 0,
+    timelineCount: 0,
+    approvedCount: 0,
+    highRiskCount: 0,
+    needsReviewCount: 0,
+    readinessScore: 0,
   };
 
   const insights: any[] = summaryData?.insights || [];
@@ -84,14 +97,28 @@ export default function DashboardOverviewPage() {
 
   const formatTwoDigit = (n: number) => String(n).padStart(2, "0");
 
-  const scheduleSlots = [
-    { time: "10:00 am", label: "Auth Bypass Sync", person: "Alex Chen", duration: "30m" },
-    { time: "10:30 am", label: "Kafka Partition RFC", person: "Priya Sharma", duration: "45m" },
-    { time: "01:00 pm", label: "Staging Secrets Audit", person: "David Kim", duration: "30m" },
-    { time: "02:15 pm", label: "Prisma ADR Signoff", person: "Sarah Connor", duration: "45m" },
-    { time: "03:10 pm", label: "Final Handover Signoff", person: "Alex & Lead", duration: "60m" },
-    { time: "04:20 pm", label: "Publish Dossier", person: "Team", duration: "20m" },
-  ];
+  const scheduleSlots =
+    selectedProjectId === "proj-apollo-9"
+      ? [
+          { time: "10:00 am", label: "Auth Bypass Sync", person: "Alex Chen", duration: "30m" },
+          { time: "10:30 am", label: "Kafka Partition RFC", person: "Priya Sharma", duration: "45m" },
+          { time: "01:00 pm", label: "Staging Secrets Audit", person: "David Kim", duration: "30m" },
+          { time: "02:15 pm", label: "Prisma ADR Signoff", person: "Sarah Connor", duration: "45m" },
+          { time: "03:10 pm", label: "Final Handover Signoff", person: "Alex & Lead", duration: "60m" },
+          { time: "04:20 pm", label: "Publish Dossier", person: "Team", duration: "20m" },
+        ]
+      : (summaryData?.handover?.transitionSteps || []).length > 0
+      ? (summaryData.handover.transitionSteps as any[]).map((step: any, idx: number) => ({
+          time: `Step 0${idx + 1}`,
+          label: step.task.slice(0, 28),
+          person: step.owner || "Lead",
+          duration: step.done ? "DONE" : "PENDING",
+        }))
+      : [
+          { time: "Step 01", label: "Link Git Repository", person: "Lead", duration: "READY" },
+          { time: "Step 02", label: "Upload Architecture Specs", person: "Team", duration: "PENDING" },
+          { time: "Step 03", label: "Reconstruct with Gemini AI", person: "System", duration: "PENDING" },
+        ];
 
   const dotColumns = [
     { day: "MO", dots: [true, true, true, false, false, false, false, false] },
@@ -157,6 +184,115 @@ export default function DashboardOverviewPage() {
     );
   }
 
+  if (projectsLoaded && availableProjects.length === 0) {
+    return (
+      <div className="max-w-[1360px] mx-auto space-y-8 text-sand-950 font-sans pb-16">
+        {/* 1. Header Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-2 border-b border-sand-300 pb-5">
+          <div>
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-sand-200/90 border border-sand-300 text-sand-800 text-[11px] font-mono mb-3">
+              <span className="w-2 h-2 rounded-full bg-moss-700" />
+              NEW ACCOUNT WORKSPACE • PRIVATE &amp; ISOLATED
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-serif tracking-tight text-sand-950">
+              Welcome, {userName}
+            </h1>
+            <p className="text-xs md:text-sm text-sand-700 mt-1 font-medium max-w-2xl">
+              Your account is initialized with a completely clean workspace. No sample data or external projects are loaded. Connect your GitHub repository to begin continuous knowledge handover.
+            </p>
+          </div>
+
+          <Link
+            href="/dashboard/projects/new"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-moss-900 text-sand-50 font-mono text-xs font-bold uppercase tracking-wider hover:bg-moss-800 transition shadow-sm shrink-0"
+          >
+            <span>[+] CONNECT GITHUB REPOSITORY</span>
+            <ArrowUpRight size={14} />
+          </Link>
+        </div>
+
+        {/* 2. Zero-State Metric Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono">
+          <div className="p-5 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs">
+            <div className="text-[10px] text-sand-600 uppercase font-bold tracking-wider">CONNECTED PROJECTS</div>
+            <div className="text-3xl font-extrabold text-sand-950 mt-1">00</div>
+            <div className="text-[11px] text-sand-500 mt-2">Zero active repositories</div>
+          </div>
+          <div className="p-5 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs">
+            <div className="text-[10px] text-sand-600 uppercase font-bold tracking-wider">INGESTED DOCUMENTS</div>
+            <div className="text-3xl font-extrabold text-sand-950 mt-1">00</div>
+            <div className="text-[11px] text-sand-500 mt-2">No uploaded RFCs or specs</div>
+          </div>
+          <div className="p-5 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs">
+            <div className="text-[10px] text-sand-600 uppercase font-bold tracking-wider">RECONSTRUCTED INSIGHTS</div>
+            <div className="text-3xl font-extrabold text-sand-950 mt-1">00</div>
+            <div className="text-[11px] text-sand-500 mt-2">Awaiting git commit sync</div>
+          </div>
+          <div className="p-5 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs">
+            <div className="text-[10px] text-sand-600 uppercase font-bold tracking-wider">CONTINUITY READINESS</div>
+            <div className="text-3xl font-extrabold text-sand-950 mt-1">00%</div>
+            <div className="text-[11px] text-sand-500 mt-2">Uninitialized pipeline</div>
+          </div>
+        </div>
+
+        {/* 3. Primary Onboarding / Ingestion Flow */}
+        <div className="p-6 md:p-8 rounded-2xl bg-[#1e2e18] text-sand-100 border border-[#273d1f] shadow-sm relative overflow-hidden">
+          <div className="max-w-2xl relative z-10 space-y-4">
+            <span className="text-[10px] font-mono tracking-widest text-moss-300 uppercase font-bold px-2.5 py-1 rounded bg-moss-900 border border-moss-700">
+              STEP 1: IMPORT CODEBASE
+            </span>
+            <h2 className="text-2xl md:text-3xl font-serif text-sand-50 tracking-tight">
+              Reconstruct Knowledge from Your GitHub Repository
+            </h2>
+            <p className="text-xs md:text-sm text-sand-300 leading-relaxed font-sans">
+              Connect your repository by providing its GitHub URL (e.g. <code>owner/repo</code>). Ex Officio automatically ingests git commits, pull requests, issue threads, and RFCs to extract architectural decisions, hidden dependencies, and handover checklists — with 100% verifiable git evidence links.
+            </p>
+            <div className="pt-2 flex flex-wrap gap-3 font-mono text-xs">
+              <Link
+                href="/dashboard/projects/new"
+                className="px-5 py-3 rounded-xl bg-sand-50 text-sand-950 font-bold uppercase tracking-wider hover:bg-sand-200 transition shadow-sm inline-flex items-center gap-1.5"
+              >
+                <span>CONNECT REPOSITORY NOW</span>
+                <ArrowUpRight size={14} />
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Three Step Pipeline Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 font-sans">
+          <div className="p-6 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs space-y-3">
+            <div className="w-8 h-8 rounded-lg bg-moss-900 text-sand-50 flex items-center justify-center font-mono font-bold text-xs">
+              01
+            </div>
+            <h3 className="font-bold text-base text-sand-950">Link Git Repository</h3>
+            <p className="text-xs text-sand-700 leading-relaxed">
+              Provide any GitHub repository. Ex Officio connects via GitHub API to continuously sync branch activity, commit hashes, and pull request reviews.
+            </p>
+          </div>
+          <div className="p-6 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs space-y-3">
+            <div className="w-8 h-8 rounded-lg bg-moss-900 text-sand-50 flex items-center justify-center font-mono font-bold text-xs">
+              02
+            </div>
+            <h3 className="font-bold text-base text-sand-950">Gemini AI Knowledge Extraction</h3>
+            <p className="text-xs text-sand-700 leading-relaxed">
+              Gemini 1.5 Pro analyzes commit messages, PR reviews, and uploaded documentation to identify unspoken technical decisions, secret rotators, and unfinished modules.
+            </p>
+          </div>
+          <div className="p-6 rounded-2xl bg-sand-50 border border-sand-300 shadow-xs space-y-3">
+            <div className="w-8 h-8 rounded-lg bg-moss-900 text-sand-50 flex items-center justify-center font-mono font-bold text-xs">
+              03
+            </div>
+            <h3 className="font-bold text-base text-sand-950">Publish Handover Dossier</h3>
+            <p className="text-xs text-sand-700 leading-relaxed">
+              Review extracted evidence, approve findings, and export a certified PDF handover dossier or generate expiring, role-scoped view tokens for incoming engineers.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1360px] mx-auto space-y-6 text-sand-950 font-sans pb-16">
       {/* 1. Header Banner & Status Badges */}
@@ -209,19 +345,11 @@ export default function DashboardOverviewPage() {
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="appearance-none pl-3 pr-7 py-1 bg-[#1e2e18] text-sand-100 rounded-md font-semibold text-[11px] tracking-wider uppercase hover:bg-[#273d1f] transition cursor-pointer focus:outline-none"
             >
-              {availableProjects.length > 0 ? (
-                availableProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name.toUpperCase()}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="proj-apollo-9">APOLLO CORE</option>
-                  <option value="proj-mercury-2">MERCURY MOBILE</option>
-                  <option value="proj-nexus-vault">NEXUS VAULT</option>
-                </>
-              )}
+              {availableProjects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name.toUpperCase()}
+                </option>
+              ))}
             </select>
             <ChevronDown
               size={12}

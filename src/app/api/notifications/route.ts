@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { store } from "@/lib/store";
 
 export async function GET(req: Request) {
   try {
     await store.ready();
+    const session = await getServerSession(authOptions);
+    const userId = session?.user ? (session.user as any).id : undefined;
+
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get("projectId") || undefined;
-    const notifications = store.getNotifications(projectId);
+    const notifications = store.getNotifications(userId, projectId);
     const unreadCount = notifications.filter((n) => !n.read).length;
 
     return NextResponse.json({ success: true, notifications, unreadCount });

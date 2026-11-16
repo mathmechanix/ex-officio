@@ -37,8 +37,8 @@ interface SidebarProps {
 export function Sidebar({
   open,
   onClose,
-  currentProjectId = "proj-apollo-9",
-  currentProjectName = "Apollo Core Platform",
+  currentProjectId = "",
+  currentProjectName = "",
   unreadCount = 0,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -141,31 +141,46 @@ export function Sidebar({
             <div>
               <div className="px-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-moss-800 font-semibold flex items-center justify-between">
                 <span>Active Project</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-moss-100 text-moss-800 truncate max-w-[90px]">
-                  {currentProjectName.split(" ")[0].toUpperCase()}
-                </span>
+                {currentProjectName && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-moss-100 text-moss-800 truncate max-w-[90px]">
+                    {currentProjectName.split(" ")[0].toUpperCase()}
+                  </span>
+                )}
               </div>
-              <div className="space-y-0.5">
-                {projectNav.map((item) => {
-                  const Icon = item.icon;
-                  const active = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={onClose}
-                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded text-xs transition ${
-                        active
-                          ? "bg-moss-900 text-sand-50 font-medium"
-                          : "text-sand-700 hover:text-sand-950 hover:bg-sand-200/70"
-                      }`}
-                    >
-                      <Icon size={14} className={active ? "text-sand-200" : "text-sand-500"} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
+              {currentProjectId ? (
+                <div className="space-y-0.5">
+                  {projectNav.map((item) => {
+                    const Icon = item.icon;
+                    const active = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onClose}
+                        className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded text-xs transition ${
+                          active
+                            ? "bg-moss-900 text-sand-50 font-medium"
+                            : "text-sand-700 hover:text-sand-950 hover:bg-sand-200/70"
+                        }`}
+                      >
+                        <Icon size={14} className={active ? "text-sand-200" : "text-sand-500"} />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-sand-200/60 border border-sand-300 space-y-2">
+                  <p className="text-[11px] text-sand-600 leading-tight">No active repository linked yet.</p>
+                  <Link
+                    href="/dashboard/projects/new"
+                    onClick={onClose}
+                    className="block text-center text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-1.5 rounded bg-moss-900 text-sand-50 hover:bg-moss-800 transition"
+                  >
+                    + Connect Repo
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>

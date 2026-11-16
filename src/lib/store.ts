@@ -187,6 +187,15 @@ const globalForStore = globalThis as unknown as {
 const INITIAL_DATA: DataStore = {
   users: [
     {
+      id: 'usr-admin-01',
+      name: 'Sarah Connor',
+      email: 'admin@exofficio.dev',
+      passwordHash: 'password123',
+      role: 'ADMIN',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
+      createdAt: new Date().toISOString(),
+    },
+    {
       id: 'usr-lead-01',
       name: 'Sarah Connor',
       email: 'lead@exofficio.dev',
@@ -799,7 +808,7 @@ export const store = {
   // Projects
   getProjects: (): StoredProject[] => readStore().projects,
   getProjectById: (id: string): StoredProject | undefined => {
-    return readStore().projects.find((p) => p.id === id || p.slug === id) || readStore().projects[0];
+    return readStore().projects.find((p) => p.id === id || p.slug === id);
   },
   createProject: (proj: Partial<StoredProject> & { name: string }): any => {
     // Persist to SQLite DB
@@ -809,7 +818,7 @@ export const store = {
       description: proj.description || 'Enterprise knowledge handover workspace',
       status: proj.status || 'HANDOVER_IN_PROGRESS',
       techStack: proj.techStack || ['TypeScript', 'Next.js'],
-      repoOwner: proj.repoOwner || 'acme-corp',
+      repoOwner: proj.repoOwner || 'repository',
       repoName: proj.repoName || (proj.slug || proj.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')),
       teamId: proj.teamId || 'team-platform',
       subTeamId: proj.subTeamId || 'sub-auth',
@@ -1059,9 +1068,23 @@ export const store = {
   },
 
   // Notifications
-  getNotifications: (projectId?: string): StoredNotification[] => {
+  getNotifications: (userIdOrProjectId?: string, specificProjectId?: string): StoredNotification[] => {
     const list = readStore().notifications;
-    return projectId ? list.filter((n) => n.projectId === projectId) : list;
+    // If specificProjectId is provided
+    if (specificProjectId) {
+      return list.filter((n) => n.projectId === specificProjectId);
+    }
+    // If first argument is a projectId (starts with 'proj-')
+    if (userIdOrProjectId && userIdOrProjectId.startsWith('proj-')) {
+      return list.filter((n) => n.projectId === userIdOrProjectId);
+    }
+    // If first argument is a userId
+    if (userIdOrProjectId) {
+      const userProjects = db.getProjects(userIdOrProjectId);
+      const allowedIds = new Set(userProjects.map((p) => p.id));
+      return list.filter((n) => allowedIds.has(n.projectId));
+    }
+    return list;
   },
   addNotification: (n: Omit<StoredNotification, 'id' | 'createdAt'>): StoredNotification => {
     const data = readStore();
@@ -1088,10 +1111,21 @@ export const store = {
     const data = readStore();
     const found = data.handovers.find((h) => h.projectId === projectId);
     if (found) return found;
+    if (projectId === 'proj-apollo-9') {
+      return {
+        projectId,
+        status: 'IN_REVIEW',
+        transitionSteps: INITIAL_DATA.handovers[0].transitionSteps,
+      };
+    }
     return {
       projectId,
       status: 'IN_REVIEW',
-      transitionSteps: INITIAL_DATA.handovers[0].transitionSteps,
+      transitionSteps: [
+        { id: `step-${Date.now()}-1`, task: 'Review architecture RFCs and technical documentation', owner: 'Lead', done: false },
+        { id: `step-${Date.now()}-2`, task: 'Conduct live code walkthrough for key modules', owner: 'Lead', done: false },
+        { id: `step-${Date.now()}-3`, task: 'Audit and rotate secrets, API keys, and environment variables', owner: 'Lead', done: false },
+      ],
     };
   },
   publishHandover: (
@@ -1102,11 +1136,16 @@ export const store = {
   ): StoredHandoverState => {
     const data = readStore();
     let handover = data.handovers.find((h) => h.projectId === projectId);
+    const now = Date.now();
     if (!handover) {
       handover = {
         projectId,
         status,
-        transitionSteps: INITIAL_DATA.handovers[0].transitionSteps,
+        transitionSteps: [
+          { id: `step-${now}-1`, task: 'Review architecture RFCs and technical documentation', owner: 'Lead', done: false },
+          { id: `step-${now}-2`, task: 'Conduct live code walkthrough for key modules', owner: 'Lead', done: false },
+          { id: `step-${now}-3`, task: 'Audit and rotate secrets, API keys, and environment variables', owner: 'Lead', done: false },
+        ],
       };
       data.handovers.push(handover);
     }
@@ -1115,7 +1154,6 @@ export const store = {
     handover.publishedBy = publishedBy;
     if (leadNotes !== undefined) handover.leadNotes = leadNotes;
 
-    const now = Date.now();
     if (status === 'PUBLISHED') {
       // Auto-approve all pending insights or mark project handover progress
       data.timeline.unshift({

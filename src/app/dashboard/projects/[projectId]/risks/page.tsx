@@ -35,7 +35,7 @@ export default function RiskAnalysisPage() {
           severity: ins.severity || "HIGH",
           likelihood: ins.severity === "CRITICAL" ? "HIGH" : "MEDIUM",
           impact: "HIGH",
-          owner: "Alex Chen → Successor Lead",
+          owner: projectId === "proj-apollo-9" ? "Alex Chen → Successor Lead" : "Assigned Contributor → Successor",
           status:
             ins.status === "APPROVED"
               ? "MITIGATED"
@@ -147,6 +147,16 @@ export default function RiskAnalysisPage() {
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-40 bg-sand-200 rounded-2xl" />
           ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-3 font-sans max-w-lg mx-auto shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-sand-200 text-moss-900 mx-auto flex items-center justify-center font-bold text-xs">
+            00
+          </div>
+          <h4 className="font-bold text-sm text-sand-950">No Identified Continuity Risks</h4>
+          <p className="text-xs text-sand-600">
+            No high-severity risks or hidden dependencies identified for this project. Sync your GitHub repository or ingest documentation to run AI continuity analysis.
+          </p>
         </div>
       ) : (
         <div className="space-y-4 font-sans">

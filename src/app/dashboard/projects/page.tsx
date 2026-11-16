@@ -74,6 +74,26 @@ export default function ProjectsPage() {
             <div key={i} className="h-56 bg-sand-200 rounded-2xl border border-sand-300" />
           ))}
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-4 max-w-xl mx-auto shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-sand-200 text-moss-900 mx-auto flex items-center justify-center font-bold text-sm">
+            00
+          </div>
+          <h2 className="text-xl font-serif font-bold text-sand-950">
+            {search ? "No matching projects found" : "No connected projects yet"}
+          </h2>
+          <p className="text-xs text-sand-700 leading-relaxed font-sans">
+            {search
+              ? `No repositories matched your search query "${search}".`
+              : "Your account is clean and has no active repositories. Connect your GitHub repository to begin continuous knowledge handover."}
+          </p>
+          <Link
+            href="/dashboard/projects/new"
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-moss-900 text-sand-50 text-xs font-mono font-bold uppercase tracking-wider hover:bg-moss-800 transition"
+          >
+            <span>[+] CONNECT GITHUB REPOSITORY</span>
+          </Link>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((project) => {

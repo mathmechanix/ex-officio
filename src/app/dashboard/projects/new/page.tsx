@@ -13,6 +13,7 @@ export default function NewProjectPage() {
   const [techInput, setTechInput] = useState("");
   const [techStack, setTechStack] = useState<string[]>(["TypeScript", "PostgreSQL"]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleAddTech = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && techInput.trim()) {
@@ -31,6 +32,7 @@ export default function NewProjectPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -44,12 +46,16 @@ export default function NewProjectPage() {
       });
       const data = await res.json();
       if (data.success && data.project) {
+        // Automatically trigger initial GitHub sync to pull commits/PRs into timeline
+        try {
+          await fetch(`/api/projects/${data.project.id}/github/sync`, { method: "POST" });
+        } catch {}
         router.push(`/dashboard/projects/${data.project.id}`);
       } else {
-        router.push("/dashboard/projects/proj-apollo-9");
+        setError(data.error || "Failed to create project workspace.");
       }
-    } catch {
-      router.push("/dashboard/projects/proj-apollo-9");
+    } catch (err: any) {
+      setError(err?.message || "Network error while connecting repository.");
     } finally {
       setLoading(false);
     }
@@ -74,6 +80,11 @@ export default function NewProjectPage() {
       </div>
 
       <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 shadow-sm">
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-100 border border-red-300 text-red-900 text-xs font-mono">
+            {error}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-5 font-mono text-xs">
           <div>
             <label className="block text-xs font-bold text-sand-900 mb-1.5 uppercase tracking-wider">

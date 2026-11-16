@@ -130,6 +130,112 @@ async function main() {
     } else {
       record("New Registered User Login", "FAIL", "Login failed for newly registered user");
     }
+
+    // 3a. Verify Clean / Blank State for New Account (Strict Demo Data Isolation)
+    const newAccountProjectsRes = await fetch(`${BASE_URL}/api/projects`, {
+      headers: { Cookie: newCookie },
+    });
+    const newAccountProjectsData = await newAccountProjectsRes.json();
+    if (newAccountProjectsRes.status === 200 && Array.isArray(newAccountProjectsData.projects) && newAccountProjectsData.projects.length === 0) {
+      record("New Account Blank Dashboard Gate", "PASS", "New account receives 0 projects (completely clean/blank workspace)");
+    } else {
+      record("New Account Blank Dashboard Gate", "FAIL", `Expected 0 projects, got ${newAccountProjectsData.projects?.length}`);
+    }
+
+    // 3b. Verify Forbidden Access to Demo Projects for New Account
+    const demoAccessRes = await fetch(`${BASE_URL}/api/projects/proj-apollo-9/summary`, {
+      headers: { Cookie: newCookie },
+    });
+    if (demoAccessRes.status === 403) {
+      record("Demo Project Isolation Check", "PASS", "New account is blocked with 403 Forbidden when requesting demo project 'proj-apollo-9'");
+    } else {
+      record("Demo Project Isolation Check", "FAIL", `Expected 403 Forbidden, got status ${demoAccessRes.status}`);
+    }
+
+    // 3c. Verify New Account Notifications Isolation
+    const newNotifsRes = await fetch(`${BASE_URL}/api/notifications`, {
+      headers: { Cookie: newCookie },
+    });
+    const newNotifsData = await newNotifsRes.json();
+    if (newNotifsRes.status === 200 && newNotifsData.unreadCount === 0 && newNotifsData.notifications?.length === 0) {
+      record("New Account Notifications Isolation", "PASS", "New account starts with 0 notifications (no demo notifications leak)");
+    } else {
+      record("New Account Notifications Isolation", "FAIL", `Expected 0 notifications, got ${newNotifsData.notifications?.length}`);
+    }
+
+    // 3d. Verify New Account Global Search Isolation
+    const newSearchRes = await fetch(`${BASE_URL}/api/search?q=kafka`, {
+      headers: { Cookie: newCookie },
+    });
+    const newSearchData = await newSearchRes.json();
+    if (newSearchRes.status === 200 && newSearchData.results?.length === 0) {
+      record("New Account Search Isolation", "PASS", "New account search returns 0 results for demo keywords (no data leakage)");
+    } else {
+      record("New Account Search Isolation", "FAIL", `Expected 0 search hits, got ${newSearchData.results?.length}`);
+    }
+
+    // 3e. Test New Account Importing GitHub Repository
+    const importRepoRes = await fetch(`${BASE_URL}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: newCookie },
+      body: JSON.stringify({
+        name: "Ex Officio Continuity Handover Service",
+        repoUrl: "https://github.com/mathmechanix/ex-officio",
+        description: "Official GitHub repository for continuous institutional memory capture",
+        techStack: ["Next.js", "TypeScript", "TailwindCSS"],
+      }),
+    });
+    const importRepoData = await importRepoRes.json();
+    if (importRepoRes.status === 201 && importRepoData.success && importRepoData.project) {
+      const p = importRepoData.project;
+      const isClean = p.repoOwner === "mathmechanix" && p.repoName === "ex-officio";
+      if (isClean) {
+        record("New Account GitHub Repository Import", "PASS", `Created workspace '${p.name}' for repo mathmechanix/ex-officio`);
+      } else {
+        record("New Account GitHub Repository Import", "WARN", `Owner/name parsed as ${p.repoOwner}/${p.repoName}`);
+      }
+
+      // Sync repository
+      const syncRes = await fetch(`${BASE_URL}/api/projects/${p.id}/github/sync`, {
+        method: "POST",
+        headers: { Cookie: newCookie },
+      });
+      const syncData = await syncRes.json();
+      if (syncRes.status === 200 && syncData.success) {
+        record("GitHub Live Commit Sync API", "PASS", `Synced repo cleanly: ${syncData.message}`);
+      } else {
+        record("GitHub Live Commit Sync API", "FAIL", `Sync status ${syncRes.status}`);
+      }
+
+      // Verify that after import, user only sees their own project
+      const updatedProjectsRes = await fetch(`${BASE_URL}/api/projects`, {
+        headers: { Cookie: newCookie },
+      });
+      const updatedProjectsData = await updatedProjectsRes.json();
+      if (updatedProjectsData.projects?.length === 1 && updatedProjectsData.projects[0].id === p.id) {
+        record("New Account Post-Import Project List", "PASS", "User sees only their own imported repository (0 demo projects)");
+      } else {
+        record("New Account Post-Import Project List", "FAIL", `Expected 1 project, got ${updatedProjectsData.projects?.length}`);
+      }
+
+      // Verify that the new project has clean zero sample data
+      const summaryRes = await fetch(`${BASE_URL}/api/projects/${p.id}/summary`, {
+        headers: { Cookie: newCookie },
+      });
+      const summaryData = await summaryRes.json();
+      if (summaryRes.status === 200 && summaryData.success) {
+        const hasZeroDemoData = summaryData.metrics?.documentsCount === 0 && summaryData.metrics?.insightsCount === 0;
+        if (hasZeroDemoData) {
+          record("New Project Clean State (Zero Sample Data)", "PASS", "New project starts with 0 sample docs and 0 sample insights");
+        } else {
+          record("New Project Clean State (Zero Sample Data)", "FAIL", `Found ${summaryData.metrics?.documentsCount} docs and ${summaryData.metrics?.insightsCount} insights`);
+        }
+      } else {
+        record("New Project Clean State (Zero Sample Data)", "FAIL", `Summary status ${summaryRes.status}`);
+      }
+    } else {
+      record("New Account GitHub Repository Import", "FAIL", `Failed to create project: ${importRepoRes.status}`);
+    }
   } catch (err: any) {
     record("User Registration & Verification", "FAIL", err.message);
   }
