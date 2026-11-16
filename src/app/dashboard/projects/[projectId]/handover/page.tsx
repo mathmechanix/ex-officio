@@ -304,7 +304,10 @@ export default function HandoverDashboardPage() {
   };
 
   const handleExportPdf = () => {
-    window.print();
+    setActiveTab("all");
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   const handleDownloadMarkdown = () => {
@@ -529,6 +532,7 @@ export default function HandoverDashboardPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-1.5 pb-2 border-b border-sand-300">
             {[
+              { id: "all", label: "★ COMPLETE REPORT (ALL)" },
               { id: "q1", label: "1. KNOWLEDGE POSSESSED" },
               { id: "q2", label: `2. DECISIONS INFLUENCED (${decisionInsights.length})` },
               { id: "q3", label: `3. CRITICAL DEPENDENCIES (${dependencyInsights.length})` },
@@ -552,7 +556,7 @@ export default function HandoverDashboardPage() {
           </div>
 
           {/* Tab 1 */}
-          {activeTab === "q1" && (
+          {(activeTab === "all" || activeTab === "q1") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-4 shadow-sm">
               <div className="text-sm font-bold text-sand-950 font-sans">
                 Question 1: What architectural knowledge did {departingMember.name} uniquely possess?
@@ -583,7 +587,7 @@ export default function HandoverDashboardPage() {
           )}
 
           {/* Tab 2 */}
-          {activeTab === "q2" && (
+          {(activeTab === "all" || activeTab === "q2") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-3 shadow-sm text-xs font-sans">
               <div className="text-sm font-bold text-sand-950">
                 Question 2: Which technical decisions did {departingMember.name} &amp; recent knowledge artifacts record?
@@ -606,7 +610,7 @@ export default function HandoverDashboardPage() {
           )}
 
           {/* Tab 3 */}
-          {activeTab === "q3" && (
+          {(activeTab === "all" || activeTab === "q3") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-3 shadow-sm text-xs font-sans">
               <div className="text-sm font-bold text-sand-950">
                 Question 3: What dependencies and infrastructure relied on their expertise?
@@ -636,7 +640,7 @@ export default function HandoverDashboardPage() {
           )}
 
           {/* Tab 4 */}
-          {activeTab === "q4" && (
+          {(activeTab === "all" || activeTab === "q4") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-4 shadow-sm text-xs font-sans">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-bold text-sand-950">
@@ -672,7 +676,7 @@ export default function HandoverDashboardPage() {
           )}
 
           {/* Tab 5 */}
-          {activeTab === "q5" && (
+          {(activeTab === "all" || activeTab === "q5") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-3 shadow-sm text-xs font-sans">
               <div className="text-sm font-bold text-sand-950">
                 Question 5: What specific continuity risks arise after their departure?
@@ -695,7 +699,7 @@ export default function HandoverDashboardPage() {
           )}
 
           {/* Tab 6 */}
-          {activeTab === "q6" && (
+          {(activeTab === "all" || activeTab === "q6") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-3 shadow-sm text-xs font-sans">
               <div className="text-sm font-bold text-sand-950">
                 Question 6: Concrete transition steps required (click any task to toggle completion)
@@ -726,7 +730,7 @@ export default function HandoverDashboardPage() {
           )}
 
           {/* Tab 7: CONTINUITY Q&A */}
-          {activeTab === "q7" && (
+          {(activeTab === "all" || activeTab === "q7") && (
             <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sand-200 pb-4">
                 <div>
@@ -964,12 +968,23 @@ export default function HandoverDashboardPage() {
                           <span className="truncate pr-2">
                             {sl.accessRole} {sl.redactSecrets ? "(Redacted)" : "(Full)"} • {sl.token}
                           </span>
-                          <button
-                            onClick={() => copyToClipboard(full)}
-                            className="text-moss-900 font-bold hover:underline shrink-0"
-                          >
-                            COPY
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0 font-mono">
+                            <a
+                              href={full}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-moss-900 font-bold hover:underline flex items-center gap-0.5"
+                            >
+                              <span>TEST VIEW</span>
+                              <ExternalLink size={10} />
+                            </a>
+                            <button
+                              onClick={() => copyToClipboard(full)}
+                              className="text-sand-700 font-bold hover:underline"
+                            >
+                              COPY
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
