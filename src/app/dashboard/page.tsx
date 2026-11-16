@@ -9,28 +9,27 @@ import { ChevronDown, ArrowUpRight, Loader2 } from "lucide-react";
 export default function DashboardOverviewPage() {
   const { data: session } = useSession();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("10:00 am");
-  const [availableProjects, setAvailableProjects] = useState<any[]>(() => {
-    return clientCache.get<any[]>("dashboard_projects") || [];
-  });
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
-    const list = clientCache.get<any[]>("dashboard_projects") || [];
-    return list.length > 0 ? list[0].id : "";
-  });
-  const [summaryData, setSummaryData] = useState<any>(() => {
-    const list = clientCache.get<any[]>("dashboard_projects") || [];
-    const firstId = list.length > 0 ? list[0].id : "";
-    return firstId ? clientCache.get<any>(`summary:${firstId}`) || null : null;
-  });
-  const [loading, setLoading] = useState(() => {
-    const list = clientCache.get<any[]>("dashboard_projects") || [];
-    const firstId = list.length > 0 ? list[0].id : "";
-    return firstId ? !clientCache.has(`summary:${firstId}`) : !clientCache.has("dashboard_projects");
-  });
-  const [projectsLoaded, setProjectsLoaded] = useState(() => {
-    return clientCache.has("dashboard_projects");
-  });
+  const [availableProjects, setAvailableProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
 
   useEffect(() => {
+    // Check client cache on mount for instant render
+    const cachedProjects = clientCache.get<any[]>("dashboard_projects");
+    if (cachedProjects && cachedProjects.length > 0) {
+      setAvailableProjects(cachedProjects);
+      setSelectedProjectId((prev) => (prev ? prev : cachedProjects[0].id));
+      setProjectsLoaded(true);
+      const firstId = cachedProjects[0].id;
+      const cachedSummary = clientCache.get<any>(`summary:${firstId}`);
+      if (cachedSummary) {
+        setSummaryData(cachedSummary);
+        setLoading(false);
+      }
+    }
+
     fetch("/api/projects", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {

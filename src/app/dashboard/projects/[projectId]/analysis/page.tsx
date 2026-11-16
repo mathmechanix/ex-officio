@@ -10,12 +10,8 @@ export default function AIAnalysisPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
-  const [insights, setInsights] = useState<any[]>(() => {
-    return clientCache.get<any[]>(`insights:${projectId}`) || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`insights:${projectId}`);
-  });
+  const [insights, setInsights] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");

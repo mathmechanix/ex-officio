@@ -52,21 +52,23 @@ export default function DashboardLayout({
   const projectMatch = pathname.match(/\/dashboard\/projects\/([^/]+)/);
   const routeProjectId = projectMatch?.[1] && projectMatch[1] !== "new" ? projectMatch[1] : undefined;
 
-  const [activeProject, setActiveProject] = useState<{ id: string; name: string } | null>(() => {
-    const cachedProjects = clientCache.get<any[]>("dashboard_projects");
-    if (cachedProjects && cachedProjects.length > 0) {
-      const match = routeProjectId
-        ? cachedProjects.find((p: any) => p.id === routeProjectId)
-        : cachedProjects[0];
-      return match ? { id: match.id, name: match.name } : { id: cachedProjects[0].id, name: cachedProjects[0].name };
-    }
-    return routeProjectId ? { id: routeProjectId, name: "Active Project" } : null;
-  });
+  const [activeProject, setActiveProject] = useState<{ id: string; name: string } | null>(
+    routeProjectId ? { id: routeProjectId, name: "Active Project" } : null
+  );
 
   // Refresh active project and notification count
   useEffect(() => {
     if (status !== "authenticated") return;
     let active = true;
+
+    // Check client cache on mount for instant state hydration
+    const cachedProjects = clientCache.get<any[]>("dashboard_projects");
+    if (cachedProjects && cachedProjects.length > 0) {
+      const match = routeProjectId
+        ? cachedProjects.find((p: any) => p.id === routeProjectId)
+        : cachedProjects[0];
+      if (match) setActiveProject({ id: match.id, name: match.name });
+    }
 
     fetch("/api/projects", { cache: "no-store" })
       .then((r) => r.json())

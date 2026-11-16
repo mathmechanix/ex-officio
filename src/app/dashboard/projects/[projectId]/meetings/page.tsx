@@ -9,16 +9,9 @@ export default function MeetingsPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
-  const [meetings, setMeetings] = useState<any[]>(() => {
-    return clientCache.get<any[]>(`meetings:${projectId}`) || [];
-  });
-  const [activeMeeting, setActiveMeeting] = useState<any>(() => {
-    const list = clientCache.get<any[]>(`meetings:${projectId}`) || [];
-    return list.length > 0 ? list[0] : null;
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`meetings:${projectId}`);
-  });
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [activeMeeting, setActiveMeeting] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
 
   // Modal state

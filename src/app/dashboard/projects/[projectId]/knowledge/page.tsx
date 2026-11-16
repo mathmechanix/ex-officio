@@ -36,12 +36,8 @@ export default function KnowledgeBasePage() {
   const [manualContent, setManualContent] = useState("");
   const [savingManual, setSavingManual] = useState(false);
 
-  const [docs, setDocs] = useState<any[]>(() => {
-    return clientCache.get<any[]>(`knowledge:${projectId}`) || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`knowledge:${projectId}`);
-  });
+  const [docs, setDocs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;

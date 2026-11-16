@@ -24,17 +24,22 @@ export default function GitHubPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState("Just now");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [projectData, setProjectData] = useState<any>(() => {
-    return clientCache.get<any>(`gh_proj:${projectId}`) || null;
-  });
-  const [timelineEvents, setTimelineEvents] = useState<any[]>(() => {
-    return clientCache.get<any[]>(`gh_timeline:${projectId}`) || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`gh_proj:${projectId}`);
-  });
+  const [projectData, setProjectData] = useState<any>(null);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadData = () => {
+    const cachedProj = clientCache.get<any>(`gh_proj:${projectId}`);
+    const cachedTimeline = clientCache.get<any[]>(`gh_timeline:${projectId}`);
+    if (cachedProj) {
+      setProjectData(cachedProj);
+      if (cachedProj.lastSyncedAt) setLastSyncedAt(cachedProj.lastSyncedAt);
+      setLoading(false);
+    }
+    if (cachedTimeline) {
+      setTimelineEvents(cachedTimeline);
+    }
+
     Promise.all([
       fetch(`/api/projects/${projectId}/summary`).then((r) => r.json()),
       fetch(`/api/projects/${projectId}/timeline`).then((r) => r.json()),

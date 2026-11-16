@@ -11,12 +11,8 @@ export default function RiskAnalysisPage() {
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
   const [filter, setFilter] = useState("ALL");
-  const [risksList, setRisksList] = useState<any[]>(() => {
-    return clientCache.get<any[]>(`risks:${projectId}`) || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`risks:${projectId}`);
-  });
+  const [risksList, setRisksList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {

@@ -7,12 +7,8 @@ import { Users, Clock, Search, ArrowUpRight } from "lucide-react";
 
 export default function ProjectsPage() {
   const [search, setSearch] = useState("");
-  const [projectList, setProjectList] = useState<any[]>(() => {
-    return clientCache.get<any[]>("all_projects") || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has("all_projects");
-  });
+  const [projectList, setProjectList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;

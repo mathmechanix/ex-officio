@@ -20,12 +20,8 @@ export default function ProjectDetailsPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
-  const [summaryData, setSummaryData] = useState<any>(() => {
-    return clientCache.get<any>(`summary:${projectId}`) || null;
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`summary:${projectId}`);
-  });
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;

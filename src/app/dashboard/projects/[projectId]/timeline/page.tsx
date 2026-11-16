@@ -24,12 +24,8 @@ export default function TimelinePage() {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [memberFilter, setMemberFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
-  const [timelineEvents, setTimelineEvents] = useState<any[]>(() => {
-    return clientCache.get<any[]>(`timeline:${projectId}`) || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    return !clientCache.has(`timeline:${projectId}`);
-  });
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;

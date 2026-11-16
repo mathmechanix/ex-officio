@@ -31,6 +31,10 @@ export const clientCache = {
     return null;
   },
 
+  has: (key: string): boolean => {
+    return clientCache.get(key) !== null;
+  },
+
   set: <T = any>(key: string, data: T): void => {
     if (typeof window === "undefined") return;
     const entry = { data, timestamp: Date.now() };
@@ -52,6 +56,21 @@ export const clientCache = {
       for (let i = 0; i < sessionStorage.length; i++) {
         const k = sessionStorage.key(i);
         if (k && k.startsWith(`eo_cache_${keyPrefix}`)) {
+          toRemove.push(k);
+        }
+      }
+      toRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
+  },
+
+  clear: (): void => {
+    if (typeof window === "undefined") return;
+    memoryCache.clear();
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith("eo_cache_")) {
           toRemove.push(k);
         }
       }
