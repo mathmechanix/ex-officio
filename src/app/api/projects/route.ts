@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { store } from '@/lib/store';
+import { ingestGitHubRepository } from '@/lib/github-ingest';
 
 export async function GET() {
   try {
     await store.ready();
     const session = await getServerSession(authOptions);
-    const userId = session?.user ? (session.user as any).id : undefined;
+    const userId = session?.user ? ((session.user as any).id || session.user.email) : undefined;
     const userRole = session?.user ? (session.user as any).role : undefined;
 
     const projects = store.getProjectsForUser(userId, userRole);
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
   try {
     await store.ready();
     const session = await getServerSession(authOptions);
-    const creatorUserId = session?.user ? (session.user as any).id : undefined;
+    const creatorUserId = session?.user ? ((session.user as any).id || session.user.email) : 'default-lead-user';
 
     const body = await req.json();
     const { name, description, techStack, repoOwner, repoName, repoUrl, teamId, subTeamId, isExclusive } = body;
@@ -74,9 +75,18 @@ export async function POST(req: Request) {
         criticalOwnership: 'Core Modules',
       },
     });
+
+    // Ingest real repository metadata, README, commits, contributors, and structure
+    try {
+      await ingestGitHubRepository(newProject.id, finalRepoOwner, finalRepoName);
+    } catch (ingestErr) {
+      console.warn('Initial GitHub repository ingestion note:', ingestErr);
+    }
+
     await store.flush();
 
-    return NextResponse.json({ success: true, project: newProject }, { status: 201 });
+    const hydratedProject = store.getProjectById(newProject.id) || newProject;
+    return NextResponse.json({ success: true, project: hydratedProject }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

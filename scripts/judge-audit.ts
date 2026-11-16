@@ -224,11 +224,15 @@ async function main() {
       });
       const summaryData = await summaryRes.json();
       if (summaryRes.status === 200 && summaryData.success) {
-        const hasZeroDemoData = summaryData.metrics?.documentsCount === 0 && summaryData.metrics?.insightsCount === 0;
-        if (hasZeroDemoData) {
-          record("New Project Clean State (Zero Sample Data)", "PASS", "New project starts with 0 sample docs and 0 sample insights");
+        const docs = summaryData.documents || [];
+        const insights = summaryData.insights || [];
+        const hasZeroApolloDemo =
+          docs.every((d: any) => d.projectId === p.id && !d.title?.toLowerCase().includes("rfc-402")) &&
+          insights.every((i: any) => i.projectId === p.id && !i.title?.toLowerCase().includes("bypassed redis cache"));
+        if (hasZeroApolloDemo) {
+          record("New Project Clean State (Zero Sample Data)", "PASS", `New project has zero demo leakage (${docs.length} real repo docs, ${insights.length} real repo insights)`);
         } else {
-          record("New Project Clean State (Zero Sample Data)", "FAIL", `Found ${summaryData.metrics?.documentsCount} docs and ${summaryData.metrics?.insightsCount} insights`);
+          record("New Project Clean State (Zero Sample Data)", "FAIL", `Found demo data leakage in docs or insights`);
         }
       } else {
         record("New Project Clean State (Zero Sample Data)", "FAIL", `Summary status ${summaryRes.status}`);

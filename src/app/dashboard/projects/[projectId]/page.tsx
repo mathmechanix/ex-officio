@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { clientCache } from "@/lib/client-cache";
 import {
   GitBranch,
   BrainCircuit,
@@ -19,17 +20,29 @@ export default function ProjectDetailsPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
-  const [summaryData, setSummaryData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [summaryData, setSummaryData] = useState<any>(() => {
+    return clientCache.get<any>(`summary:${projectId}`) || null;
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`summary:${projectId}`);
+  });
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get<any>(`summary:${projectId}`);
+    if (cached) {
+      setSummaryData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/summary`)
       .then((res) => res.json())
       .then((data) => {
         if (active && data.success) {
           setSummaryData(data);
+          clientCache.set(`summary:${projectId}`, data);
         }
       })
       .catch(() => {})
@@ -53,6 +66,10 @@ export default function ProjectDetailsPage() {
   };
   const handoverStatus = summaryData?.handover?.status || "IN_REVIEW";
 
+  const contributorsList = summaryData?.contributors || [];
+  const modulesList = summaryData?.modules || [];
+  const leadContributor = contributorsList[0];
+
   const project = {
     id: projectId,
     name: storedProject?.name || (isApollo ? "Apollo Core Platform" : "Project Workspace"),
@@ -65,15 +82,29 @@ export default function ProjectDetailsPage() {
     status: storedProject?.status || "HANDOVER_IN_PROGRESS",
     techStack: storedProject?.techStack || (isApollo ? ["TypeScript", "Next.js", "PostgreSQL", "Prisma", "Apache Kafka", "Redis"] : ["TypeScript", "Next.js"]),
     departingMember: {
-      name: storedProject?.departingMember?.name || (isApollo ? "Alex Chen" : "Unassigned"),
-      role: storedProject?.departingMember?.role || (isApollo ? "Principal Backend Architect" : "Key Contributor"),
+      name:
+        isApollo
+          ? "Alex Chen"
+          : (storedProject?.departingMember?.name && storedProject?.departingMember?.name !== "Unassigned")
+          ? storedProject.departingMember.name
+          : leadContributor?.name || "Key Contributor",
+      role:
+        isApollo
+          ? "Principal Backend Architect"
+          : storedProject?.departingMember?.role || (leadContributor ? "Lead Repository Contributor" : "Key Contributor"),
       leavingIn: storedProject?.departingMember?.leavingDate || (isApollo ? "in 4 days" : "In Schedule"),
       avatar:
-        storedProject?.departingMember?.avatar ||
-        (isApollo
+        isApollo
           ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
-          : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80"),
-      criticalOwnership: storedProject?.departingMember?.criticalOwnership || (isApollo ? "82% of Auth & Kafka Modules" : "Core Repository Modules"),
+          : leadContributor?.avatar ||
+            storedProject?.departingMember?.avatar ||
+            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
+      criticalOwnership:
+        isApollo
+          ? "82% of Auth & Kafka Modules"
+          : leadContributor
+          ? `${leadContributor.commitsCount || 10}+ commits in core modules`
+          : "Core Repository Modules",
     },
     stats: {
       commits: summaryData?.metrics?.commitsCount ?? (isApollo ? 412 : metrics.timelineCount),
@@ -119,7 +150,7 @@ export default function ProjectDetailsPage() {
       desc: "Knowledge ownership map identifying single points of failure & direct teammate contact.",
       icon: Users,
       href: `/dashboard/projects/${projectId}/team`,
-      count: "4 Members",
+      count: isApollo ? "4 Members" : `${contributorsList.length || 1} Members`,
     },
     {
       title: "Knowledge Base",
@@ -133,7 +164,7 @@ export default function ProjectDetailsPage() {
       desc: "Folder and module hierarchy showing code ownership, contributors, and doc coverage.",
       icon: Network,
       href: `/dashboard/projects/${projectId}/structure`,
-      count: "4 Modules",
+      count: isApollo ? "4 Modules" : `${modulesList.length || 1} Modules`,
     },
     {
       title: "Risks & Dependencies",

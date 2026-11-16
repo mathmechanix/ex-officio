@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { clientCache } from "@/lib/client-cache";
 import {
   Clock,
   GitCommit,
@@ -23,17 +24,29 @@ export default function TimelinePage() {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [memberFilter, setMemberFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
-  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>(() => {
+    return clientCache.get<any[]>(`timeline:${projectId}`) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`timeline:${projectId}`);
+  });
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get<any[]>(`timeline:${projectId}`);
+    if (cached) {
+      setTimelineEvents(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/timeline`)
       .then((res) => res.json())
       .then((data) => {
-        if (active && data.success && data.timeline) {
+        if (active && data.success && Array.isArray(data.timeline)) {
           setTimelineEvents(data.timeline);
+          clientCache.set(`timeline:${projectId}`, data.timeline);
         }
       })
       .catch((err) => console.error("Failed to fetch timeline:", err))

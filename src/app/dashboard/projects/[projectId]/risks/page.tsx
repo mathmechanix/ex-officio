@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { clientCache } from "@/lib/client-cache";
 import { Loader2 } from "lucide-react";
 
 export default function RiskAnalysisPage() {
@@ -10,13 +11,24 @@ export default function RiskAnalysisPage() {
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
   const [filter, setFilter] = useState("ALL");
-  const [risksList, setRisksList] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [risksList, setRisksList] = useState<any[]>(() => {
+    return clientCache.get<any[]>(`risks:${projectId}`) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`risks:${projectId}`);
+  });
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get<any[]>(`risks:${projectId}`);
+    if (cached) {
+      setRisksList(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/insights`)
       .then((res) => res.json())
       .then((data) => {
@@ -48,6 +60,7 @@ export default function RiskAnalysisPage() {
             `Verify supporting evidence (${ins.evidence?.[0]?.sourceTitle || "Repo Source"}) and complete handover transfer walkthrough.`,
         }));
         setRisksList(mapped);
+        clientCache.set(`risks:${projectId}`, mapped);
       })
       .catch(() => {})
       .finally(() => {

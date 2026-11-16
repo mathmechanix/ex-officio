@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { clientCache } from "@/lib/client-cache";
+import { ArrowLeft, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -46,10 +47,8 @@ export default function NewProjectPage() {
       });
       const data = await res.json();
       if (data.success && data.project) {
-        // Automatically trigger initial GitHub sync to pull commits/PRs into timeline
-        try {
-          await fetch(`/api/projects/${data.project.id}/github/sync`, { method: "POST" });
-        } catch {}
+        // Clear caches so the new project is immediately visible everywhere
+        clientCache.clear();
         router.push(`/dashboard/projects/${data.project.id}`);
       } else {
         setError(data.error || "Failed to create project workspace.");

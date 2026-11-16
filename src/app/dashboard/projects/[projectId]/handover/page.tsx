@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { clientCache } from "@/lib/client-cache";
 import {
   FileText,
   CheckCircle2,
@@ -65,11 +66,26 @@ export default function HandoverDashboardPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get(`summary_${projectId}`);
+    if (cached) {
+      setSummaryData(cached);
+      setReportStatus(cached.handover?.status || "IN_REVIEW");
+      setPublishedAt(cached.handover?.publishedAt);
+      setPublishedBy(cached.handover?.publishedBy);
+      setTransitionSteps(cached.handover?.transitionSteps || []);
+      setLeadNotes(cached.handover?.leadNotes || "");
+      setShareLinks(cached.shareLinks || []);
+      setQuestions(cached.handoverQuestions || []);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/summary`)
       .then((res) => res.json())
       .then((data) => {
         if (!active || !data.success) return;
+        clientCache.set(`summary_${projectId}`, data);
         setSummaryData(data);
         setReportStatus(data.handover?.status || "IN_REVIEW");
         setPublishedAt(data.handover?.publishedAt);
@@ -567,13 +583,15 @@ export default function HandoverDashboardPage() {
                 Analysis across commits, pull requests, and {documents.length} project knowledge artifacts identifies key modules &amp; institutional expertise:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                <div className="p-4 rounded-xl bg-sand-100 border border-sand-300 space-y-2">
-                  <div className="font-bold text-moss-900">Auth Token Revocation &amp; Direct DB Querying</div>
-                  <p className="text-sand-700 text-[11px] leading-relaxed font-sans">
-                    Bypasses Redis cluster lookups in eu-central to prevent 200ms replica lag during revocation events.
-                  </p>
-                  <div className="text-[10px] text-sand-500">EVIDENCE: Commit c8f49b1 (96% MATCH)</div>
-                </div>
+                {isApollo && (
+                  <div className="p-4 rounded-xl bg-sand-100 border border-sand-300 space-y-2">
+                    <div className="font-bold text-moss-900">Auth Token Revocation &amp; Direct DB Querying</div>
+                    <p className="text-sand-700 text-[11px] leading-relaxed font-sans">
+                      Bypasses Redis cluster lookups in eu-central to prevent 200ms replica lag during revocation events.
+                    </p>
+                    <div className="text-[10px] text-sand-500">EVIDENCE: Commit c8f49b1 (96% MATCH)</div>
+                  </div>
+                )}
 
                 {gapInsights.map((g) => (
                   <div key={g.id} className="p-4 rounded-xl bg-sand-100 border border-sand-300 space-y-2">
@@ -584,6 +602,22 @@ export default function HandoverDashboardPage() {
                     </div>
                   </div>
                 ))}
+
+                {!isApollo && gapInsights.length === 0 && decisionInsights.slice(0, 2).map((d) => (
+                  <div key={d.id} className="p-4 rounded-xl bg-sand-100 border border-sand-300 space-y-2">
+                    <div className="font-bold text-moss-900">{d.title}</div>
+                    <p className="text-sand-700 text-[11px] leading-relaxed font-sans">{d.content}</p>
+                    <div className="text-[10px] text-sand-500">
+                      EVIDENCE: {d.evidence?.[0]?.sourceTitle || "Commit Evidence"}
+                    </div>
+                  </div>
+                ))}
+
+                {!isApollo && gapInsights.length === 0 && decisionInsights.length === 0 && (
+                  <div className="col-span-2 p-6 rounded-xl bg-sand-100/60 border border-dashed border-sand-300 text-center text-sand-600 font-sans text-xs">
+                    No architectural knowledge concentration flagged yet for this workspace. Ingest your repository commits or upload technical specifications to auto-generate Question 1.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1113,9 +1147,11 @@ export default function HandoverDashboardPage() {
             1. What knowledge did {departingMember.name} uniquely possess?
           </h2>
           <ul className="list-disc pl-5 text-xs space-y-1.5">
-            <li>
-              <strong>Auth Token Revocation &amp; Direct DB Querying:</strong> Bypasses Redis cluster lookups in eu-central to prevent 200ms replica lag. <em>(Evidence: Commit c8f49b1)</em>
-            </li>
+            {isApollo && (
+              <li>
+                <strong>Auth Token Revocation &amp; Direct DB Querying:</strong> Bypasses Redis cluster lookups in eu-central to prevent 200ms replica lag. <em>(Evidence: Commit c8f49b1)</em>
+              </li>
+            )}
             {gapInsights.map((g) => (
               <li key={`p-${g.id}`}>
                 <strong>{g.title}:</strong> {g.content} <em>(Confidence: {Math.round(g.confidenceScore * 100)}%)</em>

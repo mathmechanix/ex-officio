@@ -182,6 +182,7 @@ const globalForStore = globalThis as unknown as {
   __exOfficioBlobEtag?: string;
   __exOfficioPendingReady?: Promise<void>;
   __exOfficioPendingFlush?: Promise<void>;
+  __exOfficioLastReadyTime?: number;
 };
 
 const INITIAL_DATA: DataStore = {
@@ -686,8 +687,17 @@ async function flushToBlob(data: DataStore): Promise<void> {
 }
 
 export const store = {
-  ready: async (): Promise<void> => {
+  ready: async (forceRefresh = false): Promise<void> => {
     if (!USE_BLOB) return;
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      globalForStore.__exOfficioLastReadyTime &&
+      now - globalForStore.__exOfficioLastReadyTime < 20000 &&
+      globalForStore.__exOfficioStoreCache
+    ) {
+      return;
+    }
     if (globalForStore.__exOfficioPendingReady) {
       await globalForStore.__exOfficioPendingReady;
       return;
@@ -704,6 +714,7 @@ export const store = {
         if (res === null) {
           const initial = readStore();
           await flushToBlob(initial);
+          globalForStore.__exOfficioLastReadyTime = Date.now();
           return;
         }
         if (res.statusCode === 200 && res.stream) {
@@ -714,6 +725,7 @@ export const store = {
           globalForStore.__exOfficioBlobEtag = res.blob.etag;
           writeLocalFallback(merged);
         }
+        globalForStore.__exOfficioLastReadyTime = Date.now();
       } catch (err) {
         console.warn('Blob store ready fallback used:', err);
         readStore();
@@ -1378,6 +1390,7 @@ export const store = {
   getDbUsers: () => db.getUsers(),
   userCanAccessProject: (userId?: string, userRole?: string, projectId?: string) => db.userCanAccessProject(userId, userRole, projectId),
   getProjectsForUser: (userId?: string, userRole?: string) => db.getProjects(userId, userRole),
+  getProjectRepoCache: (projectId: string) => db.getProjectRepoCache(projectId),
   getAllMembersWithMetrics: () => {
     const users = db.getUsers();
     const teams = db.getTeams();

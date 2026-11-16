@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { clientCache } from "@/lib/client-cache";
 import {
   UploadCloud,
   Search,
@@ -18,7 +19,7 @@ export default function KnowledgeBasePage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
   const { data: session } = useSession();
-  const currentUserName = session?.user?.name || "Sarah Connor";
+  const currentUserName = session?.user?.name || "Team Member";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("ALL");
@@ -35,17 +36,29 @@ export default function KnowledgeBasePage() {
   const [manualContent, setManualContent] = useState("");
   const [savingManual, setSavingManual] = useState(false);
 
-  const [docs, setDocs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [docs, setDocs] = useState<any[]>(() => {
+    return clientCache.get<any[]>(`knowledge:${projectId}`) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`knowledge:${projectId}`);
+  });
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get<any[]>(`knowledge:${projectId}`);
+    if (cached) {
+      setDocs(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/documents`)
       .then((res) => res.json())
       .then((data) => {
-        if (active && data.success && data.documents) {
+        if (active && data.success && Array.isArray(data.documents)) {
           setDocs(data.documents);
+          clientCache.set(`knowledge:${projectId}`, data.documents);
         }
       })
       .catch((err) => console.error("Failed to load docs:", err))
@@ -74,7 +87,11 @@ export default function KnowledgeBasePage() {
 
       const data = await res.json();
       if (data.success && data.document) {
-        setDocs((prev) => [data.document, ...prev]);
+        setDocs((prev) => {
+          const next = [data.document, ...prev];
+          clientCache.set(`knowledge:${projectId}`, next);
+          return next;
+        });
         setUploadMessage(
           `Ingested & summarized "${file.name}". Updated Timeline, AI Insights, Handover Report & Overview.`
         );
@@ -126,7 +143,11 @@ export default function KnowledgeBasePage() {
 
       const data = await res.json();
       if (data.success && data.document) {
-        setDocs((prev) => [data.document, ...prev]);
+        setDocs((prev) => {
+          const next = [data.document, ...prev];
+          clientCache.set(`knowledge:${projectId}`, next);
+          return next;
+        });
         setShowManualModal(false);
         setManualTitle("");
         setManualContent("");
@@ -150,9 +171,11 @@ export default function KnowledgeBasePage() {
       });
       const data = await res.json();
       if (data.success && data.aiSummary) {
-        setDocs((prev) =>
-          prev.map((d) => (d.id === docId ? { ...d, aiSummary: data.aiSummary } : d))
-        );
+        setDocs((prev) => {
+          const next = prev.map((d) => (d.id === docId ? { ...d, aiSummary: data.aiSummary } : d));
+          clientCache.set(`knowledge:${projectId}`, next);
+          return next;
+        });
       }
     } catch (err) {
       console.error("Summarization error:", err);

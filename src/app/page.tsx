@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -20,6 +21,9 @@ import {
 } from "lucide-react";
 
 export default function HomePage() {
+  const { data: session } = useSession();
+  const isAuthenticated = Boolean(session?.user);
+
   // Interactive Continuity Simulator for Judges
   const [simSteps, setSimSteps] = useState([
     { id: "step-1", title: "Ingest Q4 Architecture RFC & Topology Spec", points: 18, done: true },
@@ -59,18 +63,34 @@ export default function HomePage() {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3 font-mono text-xs">
-            <Link
-              href="/login"
-              className="px-2.5 py-1.5 text-sand-700 hover:text-sand-950 min-h-[38px] flex items-center"
-            >
-              SIGN IN
-            </Link>
-            <Link
-              href="/dashboard"
-              className="px-3.5 py-1.5 rounded-xl bg-moss-900 text-sand-50 font-semibold hover:bg-moss-800 transition min-h-[38px] flex items-center shadow-xs"
-            >
-              LAUNCH DASHBOARD [↗]
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <span className="text-sand-600 hidden md:inline text-[11px]">
+                  Logged in as <strong className="text-sand-900">{session?.user?.name}</strong>
+                </span>
+                <Link
+                  href="/dashboard"
+                  className="px-3.5 py-1.5 rounded-xl bg-moss-900 text-sand-50 font-semibold hover:bg-moss-800 transition min-h-[38px] flex items-center shadow-xs"
+                >
+                  LAUNCH DASHBOARD [↗]
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="px-2.5 py-1.5 text-sand-700 hover:text-sand-950 min-h-[38px] flex items-center"
+                >
+                  SIGN IN
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="px-3.5 py-1.5 rounded-xl bg-moss-900 text-sand-50 font-semibold hover:bg-moss-800 transition min-h-[38px] flex items-center shadow-xs"
+                >
+                  EXPLORE DEMO [↗]
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -96,14 +116,14 @@ export default function HomePage() {
               href="/dashboard"
               className="px-5 py-3 rounded-xl bg-moss-900 text-sand-50 font-bold uppercase tracking-wider hover:bg-moss-800 transition shadow-sm inline-flex items-center gap-1.5 min-h-[44px]"
             >
-              <span>EXPLORE DEMO WORKSPACE</span>
+              <span>{isAuthenticated ? "OPEN WORKSPACE" : "EXPLORE DEMO WORKSPACE"}</span>
               <ArrowUpRight size={14} />
             </Link>
             <Link
-              href="/dashboard/projects"
+              href={isAuthenticated ? "/dashboard/projects" : "/login"}
               className="px-4 py-3 rounded-xl bg-sand-200 hover:bg-sand-300 border border-sand-300 text-sand-900 font-bold uppercase tracking-wider transition min-h-[44px] inline-flex items-center"
             >
-              CONNECT GITHUB REPO
+              {isAuthenticated ? "VIEW PROJECTS" : "CONNECT GITHUB REPO"}
             </Link>
           </div>
         </div>

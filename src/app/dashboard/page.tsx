@@ -3,26 +3,43 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { clientCache } from "@/lib/client-cache";
 import { ChevronDown, ArrowUpRight, Loader2 } from "lucide-react";
 
 export default function DashboardOverviewPage() {
   const { data: session } = useSession();
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("10:00 am");
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-  const [availableProjects, setAvailableProjects] = useState<any[]>([]);
-  const [summaryData, setSummaryData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [availableProjects, setAvailableProjects] = useState<any[]>(() => {
+    return clientCache.get<any[]>("dashboard_projects") || [];
+  });
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
+    const list = clientCache.get<any[]>("dashboard_projects") || [];
+    return list.length > 0 ? list[0].id : "";
+  });
+  const [summaryData, setSummaryData] = useState<any>(() => {
+    const list = clientCache.get<any[]>("dashboard_projects") || [];
+    const firstId = list.length > 0 ? list[0].id : "";
+    return firstId ? clientCache.get<any>(`summary:${firstId}`) || null : null;
+  });
+  const [loading, setLoading] = useState(() => {
+    const list = clientCache.get<any[]>("dashboard_projects") || [];
+    const firstId = list.length > 0 ? list[0].id : "";
+    return firstId ? !clientCache.has(`summary:${firstId}`) : !clientCache.has("dashboard_projects");
+  });
+  const [projectsLoaded, setProjectsLoaded] = useState(() => {
+    return clientCache.has("dashboard_projects");
+  });
 
   useEffect(() => {
-    fetch("/api/projects")
+    fetch("/api/projects", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
           const list = data.projects || [];
           setAvailableProjects(list);
+          clientCache.set("dashboard_projects", list);
           if (list.length > 0) {
-            setSelectedProjectId(list[0].id);
+            setSelectedProjectId((prev) => (prev && list.some((p: any) => p.id === prev) ? prev : list[0].id));
           } else {
             setSelectedProjectId("");
             setLoading(false);
@@ -42,12 +59,20 @@ export default function DashboardOverviewPage() {
       return;
     }
     let active = true;
-    setLoading(true);
-    fetch(`/api/projects/${selectedProjectId}/summary`)
+    const cached = clientCache.get<any>(`summary:${selectedProjectId}`);
+    if (cached) {
+      setSummaryData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    fetch(`/api/projects/${selectedProjectId}/summary`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (active && data.success) {
           setSummaryData(data);
+          clientCache.set(`summary:${selectedProjectId}`, data);
         }
       })
       .catch((err) => console.error("Dashboard summary load failed:", err))

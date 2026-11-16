@@ -2,15 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { clientCache } from "@/lib/client-cache";
 import { Loader2, X, CheckCircle2 } from "lucide-react";
 
 export default function MeetingsPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
-  const [meetings, setMeetings] = useState<any[]>([]);
-  const [activeMeeting, setActiveMeeting] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [meetings, setMeetings] = useState<any[]>(() => {
+    return clientCache.get<any[]>(`meetings:${projectId}`) || [];
+  });
+  const [activeMeeting, setActiveMeeting] = useState<any>(() => {
+    const list = clientCache.get<any[]>(`meetings:${projectId}`) || [];
+    return list.length > 0 ? list[0] : null;
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`meetings:${projectId}`);
+  });
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
 
   // Modal state
@@ -25,13 +33,22 @@ export default function MeetingsPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get<any[]>(`meetings:${projectId}`);
+    if (cached) {
+      setMeetings(cached);
+      if (cached.length > 0 && !activeMeeting) setActiveMeeting(cached[0]);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/meetings`)
       .then((res) => res.json())
       .then((data) => {
-        if (active && data.success && data.meetings) {
+        if (active && data.success && Array.isArray(data.meetings)) {
           setMeetings(data.meetings);
-          if (data.meetings.length > 0) setActiveMeeting(data.meetings[0]);
+          clientCache.set(`meetings:${projectId}`, data.meetings);
+          if (data.meetings.length > 0 && !activeMeeting) setActiveMeeting(data.meetings[0]);
         }
       })
       .catch(() => {})

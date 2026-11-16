@@ -4,13 +4,15 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Mail, MessageSquare, Send, Loader2, CheckCircle2, X, Clock } from "lucide-react";
+import { Mail, MessageSquare, Send, Loader2, CheckCircle2, X, Clock, Users, ArrowUpRight } from "lucide-react";
+import { clientCache } from "@/lib/client-cache";
 
 export default function TeamPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
+  const isApollo = projectId === "proj-apollo-9";
   const { data: session } = useSession();
-  const currentUserName = session?.user?.name || "Sarah Connor";
+  const currentUserName = session?.user?.name || "Team Lead";
 
   const [contactTarget, setContactTarget] = useState<any>(null);
   const [channel, setChannel] = useState<"IN_APP" | "SYNC_REQUEST" | "EMAIL">("IN_APP");
@@ -19,34 +21,51 @@ export default function TeamPage() {
   const [sending, setSending] = useState(false);
   const [sentNotice, setSentNotice] = useState("");
   const [messagesLog, setMessagesLog] = useState<any[]>([]);
-  const [loadingLog, setLoadingLog] = useState(true);
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/projects/${projectId}/team/contact`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (active && data.success) {
-          setMessagesLog(data.messages || []);
+    const cached = clientCache.get(`summary_${projectId}`);
+    if (cached) {
+      setSummaryData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    Promise.all([
+      fetch(`/api/projects/${projectId}/summary`).then((r) => r.json()),
+      fetch(`/api/projects/${projectId}/team/contact`).then((r) => r.json()).catch(() => ({})),
+    ])
+      .then(([summaryRes, contactRes]) => {
+        if (!active) return;
+        if (summaryRes.success) {
+          clientCache.set(`summary_${projectId}`, summaryRes);
+          setSummaryData(summaryRes);
+        }
+        if (contactRes.success && Array.isArray(contactRes.messages)) {
+          setMessagesLog(contactRes.messages);
         }
       })
-      .catch(() => {})
+      .catch((err) => console.error("Failed to load team data:", err))
       .finally(() => {
-        if (active) setLoadingLog(false);
+        if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
   }, [projectId]);
 
-  const members = [
+  // Derive contributors and modules dynamically
+  const apolloMembers = [
     {
       id: "m1",
       name: "Alex Chen",
       role: "Principal Backend Architect",
       email: "alex.chen@acme.com",
-      avatar:
-        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
       isDeparting: true,
       departingDate: "Nov 14, 2026",
       commitsCount: 284,
@@ -58,8 +77,7 @@ export default function TeamPage() {
       name: "Priya Sharma",
       role: "Senior Full Stack Engineer (Successor Lead)",
       email: "priya.sharma@acme.com",
-      avatar:
-        "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120&auto=format&fit=crop&q=80",
+      avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120&auto=format&fit=crop&q=80",
       isDeparting: false,
       commitsCount: 86,
       prsMerged: 18,
@@ -70,8 +88,7 @@ export default function TeamPage() {
       name: "Sarah Connor",
       role: "Engineering Manager & Project Lead",
       email: "sarah.connor@acme.com",
-      avatar:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80",
+      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80",
       isDeparting: false,
       commitsCount: 14,
       prsMerged: 5,
@@ -82,8 +99,7 @@ export default function TeamPage() {
       name: "David Kim",
       role: "DevOps & Reliability Engineer",
       email: "david.kim@acme.com",
-      avatar:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
+      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
       isDeparting: false,
       commitsCount: 28,
       prsMerged: 9,
@@ -91,7 +107,7 @@ export default function TeamPage() {
     },
   ];
 
-  const modulesOwnership = [
+  const apolloModulesOwnership = [
     {
       module: "Data Sanitizer & Export Pipeline (/src/workers/sanitizer.ts)",
       owner: "Alex Chen (Departing)",
@@ -122,10 +138,40 @@ export default function TeamPage() {
     },
   ];
 
+  const rawContributors: any[] = summaryData?.contributors || [];
+  const rawModules: any[] = summaryData?.modules || [];
+
+  const members = isApollo
+    ? apolloMembers
+    : rawContributors.map((c, idx) => ({
+        id: c.login || `c-${idx}`,
+        name: c.name || c.login || "Contributor",
+        role: c.role || (idx === 0 ? "Key Lead Architect (Top Contributor)" : "Core Contributor"),
+        email: c.email || `${(c.login || c.name || "contributor").toLowerCase().replace(/[^a-z0-9]/g, "")}@github.com`,
+        avatar: c.avatar || `https://github.com/${c.login || "octocat"}.png`,
+        isDeparting: Boolean(c.isDeparting ?? idx === 0),
+        departingDate: c.departingDate || "In Schedule",
+        commitsCount: c.commitsCount || c.contributions || 12,
+        prsMerged: c.prsMerged ?? Math.max(1, Math.round((c.commitsCount || 12) / 3)),
+        primaryModules: c.primaryModules || [summaryData?.project?.repoName || "Core Repository"],
+      }));
+
+  const modulesOwnership = isApollo
+    ? apolloModulesOwnership
+    : rawModules.map((m) => ({
+        module: `${m.name} (${m.path})`,
+        owner: `${m.primaryOwner || members[0]?.name || "Lead Contributor"}`,
+        percent: m.ownerPercentage || 75,
+        critical: (m.ownerPercentage || 75) > 65,
+        backup: members.length > 1 ? members[1]?.name : "Assigned Successor",
+      }));
+
+  const departingPerson = members.find((m) => m.isDeparting) || members[0];
+
   const openContactModal = (member: any) => {
     setContactTarget(member);
     setChannel("IN_APP");
-    setSubject(`Handover Follow-up: ${member.primaryModules[0] || "Project Continuity"}`);
+    setSubject(`Handover Follow-up: ${member.primaryModules?.[0] || "Project Continuity"}`);
     setMessage("");
   };
 
@@ -167,6 +213,18 @@ export default function TeamPage() {
     }
   };
 
+  if (loading && !summaryData) {
+    return (
+      <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-pulse">
+        <div className="h-10 bg-sand-200 rounded-xl w-64" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="h-44 bg-sand-200 rounded-2xl" />
+          <div className="h-44 bg-sand-200 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 font-sans text-sand-950">
       {/* Header */}
@@ -176,7 +234,7 @@ export default function TeamPage() {
             Team &amp; Knowledge Ownership Map
           </h1>
           <p className="text-xs text-sand-700 mt-1 font-medium">
-            Contact contributors, track module ownership concentrations, and resolve single points of failure.
+            Contact contributors, track module ownership concentrations, and resolve single points of failure across {members.length} team member(s).
           </p>
         </div>
 
@@ -196,172 +254,204 @@ export default function TeamPage() {
       )}
 
       {/* Alert */}
-      <div className="p-4 rounded-2xl bg-sand-50 border border-red-300 flex items-start gap-3 text-xs text-sand-900">
-        <span className="font-mono text-red-700 font-bold uppercase text-[10px] shrink-0 mt-0.5">
-          [SINGLE POINT OF FAILURE ALERT]
-        </span>
-        <div>
-          3 critical modules have &gt;60% author concentration in departing engineer Alex Chen. Contact teammates directly below to coordinate knowledge transfer sessions.
+      {departingPerson && (
+        <div className="p-4 rounded-2xl bg-sand-50 border border-sand-300 flex items-start gap-3 text-xs text-sand-900">
+          <span className="font-mono text-moss-800 font-bold uppercase text-[10px] shrink-0 mt-0.5">
+            [OWNERSHIP CONCENTRATION]
+          </span>
+          <div>
+            Key knowledge holder: <strong>{departingPerson.name}</strong> ({departingPerson.role}). Tracked across {departingPerson.commitsCount} commit(s) in this repository.
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Members Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {members.map((m) => (
-          <div
-            key={m.id}
-            className={`p-5 rounded-2xl border bg-sand-50 shadow-sm flex flex-col justify-between gap-4 ${
-              m.isDeparting ? "border-moss-700" : "border-sand-300"
-            }`}
-          >
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl overflow-hidden border border-sand-400 shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={m.avatar} alt={m.name} className="w-full h-full object-cover" />
-              </div>
+      {members.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {members.map((m) => (
+            <div
+              key={m.id}
+              className={`p-5 rounded-2xl border bg-sand-50 shadow-sm flex flex-col justify-between gap-4 ${
+                m.isDeparting ? "border-moss-700" : "border-sand-300"
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl overflow-hidden border border-sand-400 shrink-0 bg-sand-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={m.avatar}
+                    alt={m.name}
+                    className="w-full h-full object-cover"
+                    onError={(e: any) => {
+                      e.target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80";
+                    }}
+                  />
+                </div>
 
-              <div className="space-y-1.5 flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sand-950 text-sm font-sans truncate">{m.name}</h3>
-                    <p className="text-xs text-sand-600 font-sans truncate">{m.role}</p>
-                    <p className="text-[11px] font-mono text-moss-800 mt-0.5 truncate">{m.email}</p>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sand-950 text-sm font-sans truncate">{m.name}</h3>
+                      <p className="text-xs text-sand-600 font-sans truncate">{m.role}</p>
+                      <p className="text-[11px] font-mono text-moss-800 mt-0.5 truncate">{m.email}</p>
+                    </div>
+                    {m.isDeparting ? (
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-moss-900 text-sand-50 uppercase shrink-0">
+                        DEPARTING {m.departingDate}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-sand-200 text-sand-800 uppercase shrink-0">
+                        ACTIVE
+                      </span>
+                    )}
                   </div>
-                  {m.isDeparting ? (
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-moss-900 text-sand-50 uppercase shrink-0">
-                      DEPARTING {m.departingDate}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-sand-200 text-sand-800 uppercase shrink-0">
-                      ACTIVE
-                    </span>
-                  )}
-                </div>
 
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {m.primaryModules.map((mod) => (
-                    <span
-                      key={mod}
-                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-sand-100 text-sand-800"
-                    >
-                      {mod}
-                    </span>
-                  ))}
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {(m.primaryModules || []).map((mod: string) => (
+                      <span
+                        key={mod}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-sand-100 text-sand-800"
+                      >
+                        {mod}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="pt-3 border-t border-sand-200 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
-              <div className="text-sand-500 flex items-center gap-3">
-                <span>{m.commitsCount} COMMITS</span>
-                <span>{m.prsMerged} PRS</span>
-              </div>
+              <div className="pt-3 border-t border-sand-200 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+                <div className="text-sand-500 flex items-center gap-3">
+                  <span>{m.commitsCount} COMMITS</span>
+                  <span>{m.prsMerged} PRS</span>
+                </div>
 
-              <div className="flex items-center gap-2">
-                <a
-                  href={`mailto:${m.email}?subject=${encodeURIComponent(`Ex Officio Handover: ${m.primaryModules[0]}`)}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-sand-200 hover:bg-sand-300 text-sand-900 font-semibold transition"
-                >
-                  <Mail size={11} />
-                  <span>EMAIL</span>
-                </a>
-                <button
-                  onClick={() => openContactModal(m)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-moss-900 hover:bg-moss-800 text-sand-50 font-semibold transition"
-                >
-                  <MessageSquare size={11} />
-                  <span>CONTACT / PING</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Ownership Map Table */}
-      <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 shadow-sm space-y-4">
-        <div className="text-xs font-mono font-bold uppercase tracking-wider text-sand-600">
-          MODULE CODE BLAME CONCENTRATION
-        </div>
-
-        <div className="space-y-3 font-mono text-xs">
-          {modulesOwnership.map((item, idx) => (
-            <div key={idx} className="p-3.5 rounded-xl bg-sand-100 border border-sand-300 space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span className="font-bold text-sand-950 font-sans text-xs">{item.module}</span>
-                <span className="text-moss-900 font-bold">{item.percent}% OWNERSHIP</span>
-              </div>
-
-              <div className="w-full bg-sand-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${item.critical ? "bg-moss-900" : "bg-moss-600"}`}
-                  style={{ width: `${item.percent}%` }}
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-sand-600">
-                <span>
-                  Primary: <strong>{item.owner}</strong>
-                </span>
-                <span className={item.critical ? "text-red-800 font-bold" : "text-sand-600"}>
-                  Backup: {item.backup}
-                </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`mailto:${m.email}?subject=${encodeURIComponent(`Ex Officio Handover: ${m.primaryModules?.[0] || "Project Continuity"}`)}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-sand-200 hover:bg-sand-300 text-sand-900 font-semibold transition"
+                  >
+                    <Mail size={11} />
+                    <span>EMAIL</span>
+                  </a>
+                  <button
+                    onClick={() => openContactModal(m)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-moss-900 hover:bg-moss-800 text-sand-50 font-semibold transition cursor-pointer"
+                  >
+                    <MessageSquare size={11} />
+                    <span>CONTACT / PING</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
+      ) : (
+        <div className="p-8 rounded-2xl bg-sand-50 border border-sand-300 text-center space-y-3 font-mono text-xs text-sand-600">
+          <Users size={28} className="mx-auto text-sand-400" />
+          <div className="font-bold text-sand-950 font-sans text-sm">No Contributors Identified Yet</div>
+          <p className="max-w-md mx-auto text-sand-600 font-sans">
+            Connect your GitHub repository or click &quot;Sync Now&quot; in the GitHub Source Stream to automatically import repository contributors and ownership maps.
+          </p>
+        </div>
+      )}
+
+      {/* Module Ownership Concentration Table */}
+      <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-4 shadow-sm">
+        <h2 className="text-sm font-bold text-sand-950 font-sans uppercase tracking-wider">
+          Single-Source Ownership &amp; Knowledge Distribution
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left font-mono text-xs">
+            <thead>
+              <tr className="border-b border-sand-200 text-sand-500 text-[10px] uppercase">
+                <th className="pb-2 font-bold">MODULE / DIRECTORY</th>
+                <th className="pb-2 font-bold">PRIMARY OWNER</th>
+                <th className="pb-2 font-bold">CONCENTRATION</th>
+                <th className="pb-2 font-bold">CONTINUITY STATUS</th>
+                <th className="pb-2 font-bold">DESIGNATED SUCCESSOR</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-sand-200">
+              {modulesOwnership.map((row, idx) => (
+                <tr key={idx} className="hover:bg-sand-100/60 transition">
+                  <td className="py-3 font-bold text-sand-950 font-sans text-xs">{row.module}</td>
+                  <td className="py-3 text-sand-800">{row.owner}</td>
+                  <td className="py-3">
+                    <span
+                      className={`px-2 py-0.5 rounded font-bold ${
+                        row.percent >= 70
+                          ? "bg-moss-200 text-moss-950 border border-moss-300"
+                          : "bg-sand-200 text-sand-800"
+                      }`}
+                    >
+                      {row.percent}%
+                    </span>
+                  </td>
+                  <td className="py-3">
+                    {row.critical ? (
+                      <span className="text-[10px] font-bold text-moss-800">
+                        CONCENTRATED
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-sand-600">DISTRIBUTED</span>
+                    )}
+                  </td>
+                  <td className="py-3 text-sand-600">{row.backup}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Recent Teammate Outreach Log */}
-      <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 shadow-sm space-y-3">
-        <div className="text-xs font-mono font-bold uppercase tracking-wider text-sand-600 flex items-center justify-between">
-          <span>TEAMMATE HANDOVER OUTREACH LOG ({messagesLog.length})</span>
-          {loadingLog && <Loader2 size={13} className="animate-spin text-moss-800" />}
-        </div>
-
-        {messagesLog.length === 0 ? (
-          <p className="text-xs text-sand-600 font-mono">
-            No handover pings dispatched yet. Use &ldquo;CONTACT / PING&rdquo; on any teammate card above to assign questions or request a sync.
-          </p>
-        ) : (
+      {/* Teammate Contact Audit Log */}
+      <div className="bg-sand-50 rounded-2xl p-6 border border-sand-300 space-y-4 shadow-sm font-mono text-xs">
+        <h2 className="text-sm font-bold text-sand-950 font-sans uppercase tracking-wider">
+          Handover Escalation &amp; Outreach Audit Log ({messagesLog.length})
+        </h2>
+        {messagesLog.length > 0 ? (
           <div className="space-y-2">
-            {messagesLog.map((msg) => (
+            {messagesLog.map((log) => (
               <div
-                key={msg.id}
-                className="p-3.5 rounded-xl bg-sand-100 border border-sand-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                key={log.id}
+                className="p-3.5 rounded-xl bg-sand-100 border border-sand-300 flex items-start justify-between gap-3"
               >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2 font-mono text-[10px]">
-                    <span className="px-1.5 py-0.5 rounded bg-moss-100 text-moss-900 font-bold">
-                      {msg.channel}
-                    </span>
-                    <span className="font-bold text-sand-900">
-                      To: {msg.toMember} ({msg.toEmail})
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sand-950">{log.subject}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-sand-200 text-sand-700 font-bold uppercase">
+                      {log.channel}
                     </span>
                   </div>
-                  <div className="font-bold text-sand-950">{msg.subject}</div>
-                  <p className="text-sand-700">{msg.message}</p>
+                  <p className="text-sand-700 font-sans text-xs">{log.message}</p>
+                  <div className="text-[10px] text-sand-500">
+                    To: {log.toMember} ({log.toEmail}) &bull; From: {log.fromUser}
+                  </div>
                 </div>
-                <span className="text-[10px] font-mono text-sand-500 shrink-0 flex items-center gap-1">
+                <div className="text-[10px] text-sand-500 shrink-0 flex items-center gap-1">
                   <Clock size={11} />
-                  {new Date(msg.createdAt).toLocaleTimeString()}
-                </span>
+                  <span>{new Date(log.createdAt).toLocaleDateString()}</span>
+                </div>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-sand-100 border border-dashed border-sand-300 text-center text-sand-500 text-xs">
+            No outreach dispatched yet. Click &quot;CONTACT / PING&quot; on any teammate above to record a handover inquiry.
           </div>
         )}
       </div>
 
-      {/* Contact Teammate Modal */}
+      {/* CONTACT MODAL */}
       {contactTarget && (
-        <div className="fixed inset-0 z-50 bg-sand-950/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-sand-50 border border-sand-300 rounded-2xl p-6 max-w-lg w-full shadow-xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-sand-950/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-sand-50 border border-sand-300 rounded-2xl p-6 max-w-lg w-full shadow-xl space-y-4 font-mono text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-sand-200">
-              <div>
-                <h3 className="font-bold text-sm text-sand-950">
-                  Contact {contactTarget.name}
+              <div className="flex items-center gap-2">
+                <MessageSquare size={16} className="text-moss-900" />
+                <h3 className="font-bold text-sm text-sand-950 font-sans">
+                  Coordinate Handover with {contactTarget.name}
                 </h3>
-                <p className="text-[11px] font-mono text-sand-600">{contactTarget.email}</p>
               </div>
               <button
                 onClick={() => setContactTarget(null)}
@@ -371,23 +461,36 @@ export default function TeamPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSendContact} className="space-y-3 font-mono text-xs">
+            <form onSubmit={handleSendContact} className="space-y-3">
               <div>
-                <label className="block text-sand-800 font-bold mb-1">DISPATCH CHANNEL</label>
+                <label className="block text-[10px] font-bold text-sand-800 mb-1">
+                  RECIPIENT
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={`${contactTarget.name} <${contactTarget.email}>`}
+                  className="w-full bg-sand-200/60 border border-sand-300 rounded-xl px-3 py-2 text-sand-700 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-sand-800 mb-1">CHANNEL</label>
                 <select
                   value={channel}
                   onChange={(e) => setChannel(e.target.value as any)}
                   className="w-full bg-sand-100 border border-sand-300 rounded-xl px-3 py-2 text-sand-950"
                 >
-                  <option value="IN_APP">IN-APP NOTIFICATION + TIMELINE LOG</option>
-                  <option value="SYNC_REQUEST">REQUEST HANDOVER SYNC SESSION</option>
-                  <option value="EMAIL">LOG &amp; OPEN MAIL CLIENT ({contactTarget.email})</option>
+                  <option value="IN_APP">In-App Notification &amp; Audit Trail</option>
+                  <option value="SYNC_REQUEST">Live Sync Walkthrough Request</option>
+                  <option value="EMAIL">Email Dispatch via mailto:</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sand-800 font-bold mb-1">SUBJECT</label>
+                <label className="block text-[10px] font-bold text-sand-800 mb-1">SUBJECT</label>
                 <input
+                  type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full bg-sand-100 border border-sand-300 rounded-xl px-3 py-2 text-sand-950 focus:outline-none focus:border-moss-700"
@@ -396,41 +499,32 @@ export default function TeamPage() {
               </div>
 
               <div>
-                <label className="block text-sand-800 font-bold mb-1">MESSAGE / HANDOVER QUESTION</label>
+                <label className="block text-[10px] font-bold text-sand-800 mb-1">MESSAGE</label>
                 <textarea
+                  rows={4}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  rows={4}
-                  placeholder={`Ask ${contactTarget.name} about module behavior, undocumented secrets, or request walkthrough pairing...`}
-                  className="w-full bg-sand-100 border border-sand-300 rounded-xl px-3 py-2 text-sand-950 font-sans focus:outline-none focus:border-moss-700"
+                  placeholder="Schedule a 30-minute knowledge transfer session or request missing runbooks..."
+                  className="w-full bg-sand-100 border border-sand-300 rounded-xl px-3 py-2 text-sand-950 font-sans text-xs focus:outline-none focus:border-moss-700"
                   required
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-3 border-t border-sand-200 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setContactTarget(null)}
-                  className="px-3 py-1.5 text-sand-600 hover:text-sand-950 uppercase"
+                  className="px-3 py-2 rounded-xl bg-sand-200 hover:bg-sand-300 text-sand-800 font-bold transition"
                 >
                   CANCEL
                 </button>
                 <button
                   type="submit"
                   disabled={sending}
-                  className="px-4 py-2 rounded-xl bg-moss-900 hover:bg-moss-800 text-sand-50 font-bold uppercase flex items-center gap-1.5 transition disabled:opacity-70"
+                  className="px-4 py-2 rounded-xl bg-moss-900 hover:bg-moss-800 text-sand-50 font-bold transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  {sending ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin" />
-                      <span>SENDING...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send size={13} />
-                      <span>DISPATCH MESSAGE</span>
-                    </>
-                  )}
+                  {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>DISPATCH MESSAGE</span>
                 </button>
               </div>
             </form>

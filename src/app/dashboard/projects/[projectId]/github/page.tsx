@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { clientCache } from "@/lib/client-cache";
 import {
   RefreshCw,
   ExternalLink,
@@ -23,9 +24,15 @@ export default function GitHubPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState("Just now");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [projectData, setProjectData] = useState<any>(null);
-  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [projectData, setProjectData] = useState<any>(() => {
+    return clientCache.get<any>(`gh_proj:${projectId}`) || null;
+  });
+  const [timelineEvents, setTimelineEvents] = useState<any[]>(() => {
+    return clientCache.get<any[]>(`gh_timeline:${projectId}`) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`gh_proj:${projectId}`);
+  });
 
   const loadData = () => {
     Promise.all([
@@ -35,11 +42,16 @@ export default function GitHubPage() {
       .then(([summaryRes, timelineRes]) => {
         if (summaryRes.success) {
           setProjectData(summaryRes.project);
+          clientCache.set(`gh_proj:${projectId}`, summaryRes.project);
           if (summaryRes.project?.lastSyncedAt) {
             setLastSyncedAt(summaryRes.project.lastSyncedAt);
           }
         }
-        if (timelineRes.success) setTimelineEvents(timelineRes.events || []);
+        if (timelineRes.success) {
+          const evts = timelineRes.events || [];
+          setTimelineEvents(evts);
+          clientCache.set(`gh_timeline:${projectId}`, evts);
+        }
       })
       .catch((err) => console.error("GitHub data load failed:", err))
       .finally(() => setLoading(false));

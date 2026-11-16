@@ -2,21 +2,34 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { clientCache } from "@/lib/client-cache";
 import { Users, Clock, Search, ArrowUpRight } from "lucide-react";
 
 export default function ProjectsPage() {
   const [search, setSearch] = useState("");
-  const [projectList, setProjectList] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [projectList, setProjectList] = useState<any[]>(() => {
+    return clientCache.get<any[]>("all_projects") || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has("all_projects");
+  });
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    fetch("/api/projects")
+    const cached = clientCache.get<any[]>("all_projects");
+    if (cached) {
+      setProjectList(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    fetch("/api/projects", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
-        if (active && data.success && data.projects) {
+        if (active && data.success && Array.isArray(data.projects)) {
           setProjectList(data.projects);
+          clientCache.set("all_projects", data.projects);
         }
       })
       .catch((err) => console.error("Failed to load projects:", err))

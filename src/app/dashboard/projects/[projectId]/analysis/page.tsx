@@ -3,17 +3,22 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { clientCache } from "@/lib/client-cache";
 import { Loader2, Plus, X } from "lucide-react";
 
 export default function AIAnalysisPage() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "proj-apollo-9";
 
-  const [loading, setLoading] = useState(true);
+  const [insights, setInsights] = useState<any[]>(() => {
+    return clientCache.get<any[]>(`insights:${projectId}`) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    return !clientCache.has(`insights:${projectId}`);
+  });
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
-  const [insights, setInsights] = useState<any[]>([]);
   const [analysisSummary, setAnalysisSummary] = useState("");
 
   // Manual Insight Modal
@@ -26,12 +31,20 @@ export default function AIAnalysisPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = clientCache.get<any[]>(`insights:${projectId}`);
+    if (cached) {
+      setInsights(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     fetch(`/api/projects/${projectId}/insights`)
       .then((res) => res.json())
       .then((data) => {
-        if (active && data.success && data.insights) {
+        if (active && data.success && Array.isArray(data.insights)) {
           setInsights(data.insights);
+          clientCache.set(`insights:${projectId}`, data.insights);
         }
       })
       .catch((err) => console.error("Failed to load insights:", err))

@@ -1161,9 +1161,14 @@ export const db = {
       const memberRows = inst.prepare(`SELECT project_id FROM project_members WHERE user_id = ?;`).all(userId) as any[];
       const allowedIds = new Set(memberRows.map((m) => m.project_id));
 
+      if (userRole === 'ADMIN') {
+        return nonDemoProjects;
+      }
+
       return nonDemoProjects.filter((p) => {
         if (allowedIds.has(p.id)) return true;
         if (p.creatorUserId === userId) return true;
+        if (user && (p.creatorUserId === user.email || p.creatorUserId === user.id || p.creatorUserId === user.name)) return true;
         return false;
       });
     }
@@ -1240,14 +1245,18 @@ export const db = {
 
     // 2. If accessing a USER-CREATED / NON-DEMO project
     if (!userId) return false;
+    if (userRole === 'ADMIN') return true;
 
+    const user = db.findUserById(userId);
+    const userEmail = user?.email || userId;
     const inst = getDbInstance();
-    const member = inst.prepare(`SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?;`).get(projectId, userId);
+    const member = inst.prepare(`SELECT 1 FROM project_members WHERE project_id = ? AND (user_id = ? OR user_id = ?);`).get(projectId, userId, userEmail);
     if (member) return true;
 
     const proj = db.getProjectById(projectId);
     if (!proj) return false;
     if (proj.creatorUserId === userId) return true;
+    if (user && (proj.creatorUserId === user.email || proj.creatorUserId === user.id || proj.creatorUserId === user.name)) return true;
     if (!proj.isExclusive) return true;
 
     return false;
@@ -1351,6 +1360,31 @@ export const db = {
   removeMemberFromProject: (projectId: string, userId: string) => {
     const inst = getDbInstance();
     inst.prepare(`DELETE FROM project_members WHERE project_id = ? AND user_id = ?;`).run(projectId, userId);
+  },
+
+  // Repository Contributors & File Tree Cache
+  getProjectRepoCache: (projectId: string) => {
+    const inst = getDbInstance();
+    try {
+      inst.prepare(`
+        CREATE TABLE IF NOT EXISTS project_repo_cache (
+          project_id TEXT PRIMARY KEY,
+          contributors_json TEXT,
+          modules_json TEXT,
+          repo_meta_json TEXT,
+          updated_at TEXT
+        );
+      `).run();
+      const row = inst.prepare(`SELECT contributors_json, modules_json, repo_meta_json FROM project_repo_cache WHERE project_id = ?;`).get(projectId) as any;
+      if (!row) return null;
+      return {
+        contributors: JSON.parse(row.contributors_json || '[]'),
+        modules: JSON.parse(row.modules_json || '[]'),
+        repoMeta: JSON.parse(row.repo_meta_json || '{}'),
+      };
+    } catch {
+      return null;
+    }
   },
 
   // Handover Q&A

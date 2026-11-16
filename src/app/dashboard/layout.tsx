@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { clientCache } from "@/lib/client-cache";
 import {
   Menu,
   Bell,
@@ -48,21 +49,31 @@ export default function DashboardLayout({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const pathname = usePathname();
-  const [activeProject, setActiveProject] = useState<{ id: string; name: string } | null>(null);
-
   const projectMatch = pathname.match(/\/dashboard\/projects\/([^/]+)/);
   const routeProjectId = projectMatch?.[1] && projectMatch[1] !== "new" ? projectMatch[1] : undefined;
+
+  const [activeProject, setActiveProject] = useState<{ id: string; name: string } | null>(() => {
+    const cachedProjects = clientCache.get<any[]>("dashboard_projects");
+    if (cachedProjects && cachedProjects.length > 0) {
+      const match = routeProjectId
+        ? cachedProjects.find((p: any) => p.id === routeProjectId)
+        : cachedProjects[0];
+      return match ? { id: match.id, name: match.name } : { id: cachedProjects[0].id, name: cachedProjects[0].name };
+    }
+    return routeProjectId ? { id: routeProjectId, name: "Active Project" } : null;
+  });
 
   // Refresh active project and notification count
   useEffect(() => {
     if (status !== "authenticated") return;
     let active = true;
 
-    fetch("/api/projects")
+    fetch("/api/projects", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (!active) return;
         if (data.success && Array.isArray(data.projects) && data.projects.length > 0) {
+          clientCache.set("dashboard_projects", data.projects);
           const match = routeProjectId
             ? data.projects.find((p: any) => p.id === routeProjectId)
             : data.projects[0];
@@ -71,7 +82,7 @@ export default function DashboardLayout({
           } else {
             setActiveProject({ id: data.projects[0].id, name: data.projects[0].name });
           }
-        } else {
+        } else if (!routeProjectId) {
           setActiveProject(null);
         }
       })
@@ -150,9 +161,9 @@ export default function DashboardLayout({
   const topNavTabs = [
     { label: "DASHBOARD", href: "/dashboard" },
     { label: "PROJECTS", href: "/dashboard/projects" },
-    { label: "TIMELINE", href: `/dashboard/projects/${currentProjectId}/timeline` },
-    { label: "AI ANALYSIS", href: `/dashboard/projects/${currentProjectId}/analysis` },
-    { label: "HANDOVER", href: `/dashboard/projects/${currentProjectId}/handover` },
+    { label: "TIMELINE", href: currentProjectId ? `/dashboard/projects/${currentProjectId}/timeline` : "/dashboard/projects" },
+    { label: "AI ANALYSIS", href: currentProjectId ? `/dashboard/projects/${currentProjectId}/analysis` : "/dashboard/projects" },
+    { label: "HANDOVER", href: currentProjectId ? `/dashboard/projects/${currentProjectId}/handover` : "/dashboard/projects" },
     { label: "ACCOUNT", href: "/dashboard/settings" },
   ];
 
